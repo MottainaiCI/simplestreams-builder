@@ -72,6 +72,7 @@ func BuildIndexStruct(config *config.BuilderTreeConfig) (*lxd_streams.SimpleStre
 		DataType: config.DataType,
 		Path: fmt.Sprintf("%s%s/images.json",
 			prefix, ipath),
+		Format: config.Format,
 	}
 
 	for _, v := range config.Products {

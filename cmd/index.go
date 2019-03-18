@@ -22,7 +22,10 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
+	"bufio"
+	"fmt"
 	"os"
+	path "path/filepath"
 
 	utils "github.com/MottainaiCI/mottainai-server/pkg/utils"
 	"github.com/spf13/cobra"
@@ -37,13 +40,47 @@ func newBuildIndexCommand(config *config.BuilderTreeConfig) *cobra.Command {
 		Short: "Build index.json file of the tree",
 		Args:  cobra.NoArgs,
 		PreRun: func(cmd *cobra.Command, args []string) {
+			if config.Viper.Get("target-dir") == "" && !config.Viper.GetBool("stdout") {
+				fmt.Println("Missing target-dir or stdout option")
+				os.Exit(1)
+			} else if config.Viper.Get("target-dir") != "" && config.Viper.GetBool("stdout") {
+				fmt.Println("Use target-dir or stdout option, not both.")
+				os.Exit(1)
+			}
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			var f string
+			var err error
+
 			idx, err := index.BuildIndexStruct(config)
 			utils.CheckError(err)
 
 			if config.Viper.GetBool("stdout") {
 				index.WriteIndexJson(idx, os.Stdout)
+			} else {
+				// Create target directory if doesn't exist.
+				// NOTE: Current LXD implementation has a static path for
+				// index.json for path streams/v1 so I use always this
+				// path for now.
+				f = fmt.Sprintf("%s/streams/v1/index.json",
+					config.Viper.Get("target-dir"))
+
+				if _, err := os.Stat(path.Dir(f)); os.IsNotExist(err) {
+					err = os.MkdirAll(path.Dir(f), 0760)
+					utils.CheckError(err)
+				}
+
+				file, err := os.OpenFile(f, os.O_WRONLY|os.O_CREATE, 0666)
+				if err != nil {
+					fmt.Println("Error on create index file " + err.Error())
+					os.Exit(1)
+				}
+				defer file.Close()
+
+				w := bufio.NewWriter(file)
+				err = index.WriteIndexJson(idx, w)
+				utils.CheckError(err)
+				w.Flush()
 			}
 		},
 	}
