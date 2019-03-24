@@ -22,72 +22,67 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	path "path/filepath"
 
 	utils "github.com/MottainaiCI/mottainai-server/pkg/utils"
 	"github.com/spf13/cobra"
 
 	conf "github.com/MottainaiCI/simplestreams-builder/pkg/config"
-	index "github.com/MottainaiCI/simplestreams-builder/pkg/index"
+	images "github.com/MottainaiCI/simplestreams-builder/pkg/images"
 )
 
-func newBuildIndexCommand(config *conf.BuilderTreeConfig) *cobra.Command {
+func newBuildVersionsManifestCommand(config *conf.BuilderTreeConfig) *cobra.Command {
+
 	var cmd = &cobra.Command{
-		Use:   "build-index",
-		Short: "Build index.json file of the tree",
+		Use:   "build-versions-manifest",
+		Short: "Build ssb.json file of one product",
 		Args:  cobra.NoArgs,
 		PreRun: func(cmd *cobra.Command, args []string) {
-			if config.Viper.Get("target-dir") == "" && !config.Viper.GetBool("stdout") {
-				fmt.Println("Missing target-dir or stdout option")
+			if config.Viper.Get("product") == "" {
+				fmt.Println("No product choice.")
 				os.Exit(1)
-			} else if config.Viper.Get("target-dir") != "" && config.Viper.GetBool("stdout") {
-				fmt.Println("Use target-dir or stdout option, not both.")
+			}
+			if config.Viper.Get("source-dir") == "" {
+				fmt.Println("Missing source-dir option.")
 				os.Exit(1)
 			}
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			var f string
-			var err error
+			var ssp *conf.SimpleStreamsProduct = nil
+			var productDir string
 
-			idx, err := index.BuildIndexStruct(config)
+			for _, p := range config.Products {
+				if p.Name == config.Viper.Get("product") {
+					ssp = &p
+					break
+				}
+			}
+
+			if ssp == nil {
+				fmt.Println("No product found with name " + config.Viper.Get("product").(string))
+				os.Exit(1)
+			}
+
+			productDir = fmt.Sprintf("%s/%s", config.Viper.Get("source-dir"),
+				ssp.Directory)
+
+			manifest, err := images.BuildVersionsManifest(ssp, productDir, config.Prefix)
 			utils.CheckError(err)
 
 			if config.Viper.GetBool("stdout") {
-				index.WriteIndexJson(idx, os.Stdout)
-			} else {
-				// Create target directory if doesn't exist.
-				// NOTE: Current LXD implementation has a static path for
-				// index.json for path streams/v1 so I use always this
-				// path for now.
-				f = fmt.Sprintf("%s/streams/v1/index.json",
-					config.Viper.Get("target-dir"))
-
-				if _, err := os.Stat(path.Dir(f)); os.IsNotExist(err) {
-					err = os.MkdirAll(path.Dir(f), 0760)
-					utils.CheckError(err)
-				}
-
-				file, err := os.OpenFile(f, os.O_WRONLY|os.O_CREATE, 0666)
-				if err != nil {
-					fmt.Println("Error on create index file " + err.Error())
-					os.Exit(1)
-				}
-				defer file.Close()
-
-				w := bufio.NewWriter(file)
-				err = index.WriteIndexJson(idx, w)
-				utils.CheckError(err)
-				w.Flush()
+				images.WriteVersionsManifestJson(manifest, os.Stdout)
 			}
 		},
 	}
 
 	var pflags = cmd.PersistentFlags()
-	pflags.Bool("stdout", false, "Print index.json to stdout")
+	pflags.Bool("stdout", false, "Print ssb.json to stdout")
 	config.Viper.BindPFlag("stdout", pflags.Lookup("stdout"))
+	pflags.StringP("product", "p", "", "Name of the product to elaborate.")
+	config.Viper.BindPFlag("product", pflags.Lookup("product"))
+	pflags.StringP("source-dir", "s", "", "Directory where retrieve images for Manifest.")
+	config.Viper.BindPFlag("source-dir", pflags.Lookup("source-dir"))
 
 	return cmd
 }

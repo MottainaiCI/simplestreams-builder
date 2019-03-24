@@ -29,7 +29,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	config "github.com/MottainaiCI/simplestreams-builder/pkg/config"
+	conf "github.com/MottainaiCI/simplestreams-builder/pkg/config"
 )
 
 const (
@@ -42,7 +42,7 @@ Mottainai - LXC/LXD Simplestreams Tree Builder`
 	SSB_VERSION    = `0.1.0`
 )
 
-func initConfig(config *config.BuilderTreeConfig) {
+func initConfig(config *conf.BuilderTreeConfig) {
 	// Set env variable
 	config.Viper.SetEnvPrefix(SSB_ENV_PREFIX)
 	config.Viper.BindEnv("config")
@@ -53,7 +53,7 @@ func initConfig(config *config.BuilderTreeConfig) {
 	config.Viper.SetTypeByDefaultValue(true)
 }
 
-func initCommand(rootCmd *cobra.Command, config *config.BuilderTreeConfig) {
+func initCommand(rootCmd *cobra.Command, config *conf.BuilderTreeConfig) {
 	var pflags = rootCmd.PersistentFlags()
 
 	pflags.StringP("config", "c", "", "SimpleStreams Builder configuration file")
@@ -65,12 +65,14 @@ func initCommand(rootCmd *cobra.Command, config *config.BuilderTreeConfig) {
 	rootCmd.AddCommand(
 		newPrintCommand(config),
 		newBuildIndexCommand(config),
+		newBuildImageFileCommand(config),
+		newBuildVersionsManifestCommand(config),
 	)
 }
 
 func Execute() {
 	// Create Main Instance Config object
-	var config *config.BuilderTreeConfig = config.NewBuilderTreeConfig(nil)
+	var config *conf.BuilderTreeConfig = conf.NewBuilderTreeConfig(nil)
 
 	initConfig(config)
 

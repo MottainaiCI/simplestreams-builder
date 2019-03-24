@@ -4,6 +4,7 @@
 # Define a specific path where build simple streams files.
 # By defualt use path / for expose images.
 # prefix: '/'
+prefix: 'images'
 
 # Path of the images.json
 images_path: streams/v1
@@ -34,6 +35,7 @@ products:
   - name: sabayon-base:current:amd64:default
     arch: amd64
     release: current
+    os: Sabayon
     directory: sbi/sabayon-base
     aliases:
       - "sabayon/base"

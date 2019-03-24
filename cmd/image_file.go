@@ -31,13 +31,14 @@ import (
 	"github.com/spf13/cobra"
 
 	conf "github.com/MottainaiCI/simplestreams-builder/pkg/config"
-	index "github.com/MottainaiCI/simplestreams-builder/pkg/index"
+	images "github.com/MottainaiCI/simplestreams-builder/pkg/images"
 )
 
-func newBuildIndexCommand(config *conf.BuilderTreeConfig) *cobra.Command {
+func newBuildImageFileCommand(config *conf.BuilderTreeConfig) *cobra.Command {
+
 	var cmd = &cobra.Command{
-		Use:   "build-index",
-		Short: "Build index.json file of the tree",
+		Use:   "build-image-file",
+		Short: "Build images.json file of the tree",
 		Args:  cobra.NoArgs,
 		PreRun: func(cmd *cobra.Command, args []string) {
 			if config.Viper.Get("target-dir") == "" && !config.Viper.GetBool("stdout") {
@@ -52,17 +53,18 @@ func newBuildIndexCommand(config *conf.BuilderTreeConfig) *cobra.Command {
 			var f string
 			var err error
 
-			idx, err := index.BuildIndexStruct(config)
+			imgs, err := images.BuildImagesFile(config)
 			utils.CheckError(err)
 
 			if config.Viper.GetBool("stdout") {
-				index.WriteIndexJson(idx, os.Stdout)
+				images.WriteImagesJson(imgs, os.Stdout)
 			} else {
+
 				// Create target directory if doesn't exist.
 				// NOTE: Current LXD implementation has a static path for
 				// index.json for path streams/v1 so I use always this
 				// path for now.
-				f = fmt.Sprintf("%s/streams/v1/index.json",
+				f = fmt.Sprintf("%s/streams/v1/images.json",
 					config.Viper.Get("target-dir"))
 
 				if _, err := os.Stat(path.Dir(f)); os.IsNotExist(err) {
@@ -78,7 +80,7 @@ func newBuildIndexCommand(config *conf.BuilderTreeConfig) *cobra.Command {
 				defer file.Close()
 
 				w := bufio.NewWriter(file)
-				err = index.WriteIndexJson(idx, w)
+				err = images.WriteImagesJson(imgs, w)
 				utils.CheckError(err)
 				w.Flush()
 			}
