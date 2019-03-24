@@ -264,7 +264,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:f7283fd421da7cd1bfb950c052e4070a823343bb874ffffc3b7c3e04678f5ca3"
+  digest = "1:8302bb1fe120ac26722bb009a92818f03f04fa97fea888be9698ae425a499e31"
   name = "github.com/lxc/lxd"
   packages = [
     "shared",
@@ -275,8 +275,8 @@
     "shared/osarch",
     "shared/simplestreams",
   ]
-  pruneopts = "UT"
-  revision = "ee711ae6437ce17447c20cb9d185c00c2b272f1f"
+  pruneopts = "T"
+  revision = "40f9a6bc7f215d22b0757dcf813f833b5d17f00e"
 
 [[projects]]
   digest = "1:c568d7727aa262c32bdf8a3f7db83614f7af0ed661474b24588de635c20024c7"
