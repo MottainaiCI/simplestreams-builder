@@ -25,7 +25,8 @@ products:
     os: Sabayon
     release_title: "Sabayon Builder"
     directory: sbi/sabayon-builder
-    # Path where retrieve images informations and files
+    # Path where retrieve images informations and files.
+    # This option is used by build-images-file
     #prefix_path: ""
 
     aliases:

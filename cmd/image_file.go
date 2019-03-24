@@ -34,10 +34,10 @@ import (
 	images "github.com/MottainaiCI/simplestreams-builder/pkg/images"
 )
 
-func newBuildImageFileCommand(config *conf.BuilderTreeConfig) *cobra.Command {
+func newBuildImagesFileCommand(config *conf.BuilderTreeConfig) *cobra.Command {
 
 	var cmd = &cobra.Command{
-		Use:   "build-image-file",
+		Use:   "build-images-file",
 		Short: "Build images.json file of the tree",
 		Args:  cobra.NoArgs,
 		PreRun: func(cmd *cobra.Command, args []string) {

@@ -22,8 +22,10 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	path "path/filepath"
 
 	utils "github.com/MottainaiCI/mottainai-server/pkg/utils"
 	"github.com/spf13/cobra"
@@ -50,7 +52,7 @@ func newBuildVersionsManifestCommand(config *conf.BuilderTreeConfig) *cobra.Comm
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			var ssp *conf.SimpleStreamsProduct = nil
-			var productDir string
+			var productDir, f string
 
 			for _, p := range config.Products {
 				if p.Name == config.Viper.Get("product") {
@@ -72,7 +74,34 @@ func newBuildVersionsManifestCommand(config *conf.BuilderTreeConfig) *cobra.Comm
 
 			if config.Viper.GetBool("stdout") {
 				images.WriteVersionsManifestJson(manifest, os.Stdout)
+			} else {
+
+				if config.Viper.Get("target-dir") != "" {
+					f = fmt.Sprintf("%s/%s/ssb.json", config.Viper.Get("target-dir"),
+						ssp.Directory)
+				} else {
+					// I write files under source dir
+					f = fmt.Sprintf("%s/ssb.json", productDir)
+				}
+
+				if _, err := os.Stat(path.Dir(f)); os.IsNotExist(err) {
+					err = os.MkdirAll(path.Dir(f), 0760)
+					utils.CheckError(err)
+				}
+
+				file, err := os.OpenFile(f, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+				if err != nil {
+					fmt.Println("Error on create index file " + err.Error())
+					os.Exit(1)
+				}
+				defer file.Close()
+
+				w := bufio.NewWriter(file)
+				err = images.WriteVersionsManifestJson(manifest, w)
+				utils.CheckError(err)
+				w.Flush()
 			}
+
 		},
 	}
 
