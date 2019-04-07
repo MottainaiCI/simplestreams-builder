@@ -30,6 +30,7 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"time"
 
@@ -175,4 +176,65 @@ func checkItem(base, dir, productBasePath string) (*lxd_streams.SimpleStreamsMan
 func WriteVersionsManifestJson(manifest *VersionsSSBuilderManifest, out io.Writer) error {
 	enc := json.NewEncoder(out)
 	return enc.Encode(manifest)
+}
+
+func ReadVersionsManifestJsonFromUrl(url string) (*VersionsSSBuilderManifest, error) {
+	var ans *VersionsSSBuilderManifest = nil
+	var err error
+
+	transport := &http.Transport{
+		Proxy:           http.ProxyFromEnvironment,
+		MaxIdleConns:    5,
+		IdleConnTimeout: 30 * time.Second,
+	}
+
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   60 * time.Second,
+	}
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Invalid response %d for url %s",
+			resp.StatusCode, url)
+	}
+
+	byteValue, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ans = &VersionsSSBuilderManifest{}
+	err = json.Unmarshal(byteValue, ans)
+	if err != nil {
+		return nil, err
+	}
+
+	return ans, nil
+}
+
+func ReadVersionsManifestJson(ssbPath string) (*VersionsSSBuilderManifest, error) {
+	file, err := os.OpenFile(ssbPath, os.O_RDONLY, 0665)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	byteValue, err := ioutil.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	var ans *VersionsSSBuilderManifest = &VersionsSSBuilderManifest{}
+	err = json.Unmarshal(byteValue, ans)
+	if err != nil {
+		return nil, err
+	}
+
+	return ans, nil
 }

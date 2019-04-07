@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	path "path/filepath"
+	"strings"
 
 	utils "github.com/MottainaiCI/mottainai-server/pkg/utils"
 	"github.com/spf13/cobra"
@@ -41,22 +42,28 @@ func newBuildImagesFileCommand(config *conf.BuilderTreeConfig) *cobra.Command {
 		Short: "Build images.json file of the tree",
 		Args:  cobra.NoArgs,
 		PreRun: func(cmd *cobra.Command, args []string) {
-			if config.Viper.Get("target-dir") == "" && !config.Viper.GetBool("stdout") {
+			if config.Viper.Get("target-dir") == "" && !config.Viper.GetBool("stdout-image") {
 				fmt.Println("Missing target-dir or stdout option")
 				os.Exit(1)
-			} else if config.Viper.Get("target-dir") != "" && config.Viper.GetBool("stdout") {
+			} else if config.Viper.Get("target-dir") != "" && config.Viper.GetBool("stdout-image") {
 				fmt.Println("Use target-dir or stdout option, not both.")
 				os.Exit(1)
 			}
+
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			var f string
+			var f, sourceDir string
 			var err error
 
-			imgs, err := images.BuildImagesFile(config)
+			if config.Viper.Get("source-dir-images") != "" {
+				sourceDir = config.Viper.GetString("source-dir-images")
+			} else {
+				sourceDir = config.Viper.GetString("target-dir")
+			}
+			imgs, err := images.BuildImagesFile(config, sourceDir)
 			utils.CheckError(err)
 
-			if config.Viper.GetBool("stdout") {
+			if config.Viper.GetBool("stdout-image") {
 				images.WriteImagesJson(imgs, os.Stdout)
 			} else {
 
@@ -65,7 +72,7 @@ func newBuildImagesFileCommand(config *conf.BuilderTreeConfig) *cobra.Command {
 				// index.json for path streams/v1 so I use always this
 				// path for now.
 				f = fmt.Sprintf("%s/streams/v1/images.json",
-					config.Viper.Get("target-dir"))
+					strings.TrimRight(config.Viper.GetString("target-dir"), "/"))
 
 				if _, err := os.Stat(path.Dir(f)); os.IsNotExist(err) {
 					err = os.MkdirAll(path.Dir(f), 0760)
@@ -89,7 +96,11 @@ func newBuildImagesFileCommand(config *conf.BuilderTreeConfig) *cobra.Command {
 
 	var pflags = cmd.PersistentFlags()
 	pflags.Bool("stdout", false, "Print index.json to stdout")
-	config.Viper.BindPFlag("stdout", pflags.Lookup("stdout"))
+	config.Viper.BindPFlag("stdout-image", pflags.Lookup("stdout"))
+	pflags.StringP("source-dir", "s", "",
+		`Directory where retrieve images manifests.
+If not set source-dir then target-dir is used.`)
+	config.Viper.BindPFlag("source-dir-images", pflags.Lookup("source-dir"))
 
 	return cmd
 }

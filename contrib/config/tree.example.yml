@@ -27,7 +27,7 @@ products:
     directory: sbi/sabayon-builder
     # Path where retrieve images informations and files.
     # This option is used by build-images-file
-    #prefix_path: ""
+    prefix_path: "http://my.mottainai.org/namespace/lxd-sabayon-builder"
 
     aliases:
       - "sabayon/builder"
@@ -38,6 +38,7 @@ products:
     release: current
     os: Sabayon
     directory: sbi/sabayon-base
+    #hidden: true
     aliases:
       - "sabayon/base"
 

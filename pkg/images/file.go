@@ -25,6 +25,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path"
 	"strings"
 
 	lxd_streams "github.com/lxc/lxd/shared/simplestreams"
@@ -32,12 +34,14 @@ import (
 	config "github.com/MottainaiCI/simplestreams-builder/pkg/config"
 )
 
-func BuildImagesFile(config *config.BuilderTreeConfig) (*lxd_streams.SimpleStreamsManifest, error) {
+func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_streams.SimpleStreamsManifest, error) {
 	// NOTE: currently SimpleStreamsManifest struct doesn't contain
 	//       content_id field.
-	var ipath, prefix string
+	var ipath, prefix, ssbPath string
 	var ans *lxd_streams.SimpleStreamsManifest
 	var prodMap map[string]lxd_streams.SimpleStreamsManifestProduct
+	var manifest *VersionsSSBuilderManifest
+	var err error
 
 	if config.DataType == "" {
 		return nil, fmt.Errorf("Invalid datatype")
@@ -86,11 +90,57 @@ func BuildImagesFile(config *config.BuilderTreeConfig) (*lxd_streams.SimpleStrea
 			continue
 		}
 
+		// For every product I try to retrieve ssb.json file
+		// for set versions map.
+		if v.PrefixPath != "" {
+
+			ssbPath = fmt.Sprintf("%s/%s/ssb.json",
+				strings.TrimRight(v.PrefixPath, "/"),
+				strings.TrimRight(v.Directory, "/"),
+			)
+			// Fetch and parse remote ssb.json file
+			manifest, err = ReadVersionsManifestJsonFromUrl(ssbPath)
+
+		} else {
+			// POST: Try to search ssb.json file under local filesystem.
+
+			if sourceDir == "" {
+				return nil, fmt.Errorf(
+					"Product %s without prefix_path but source-dir is empty.",
+					v.Name)
+			}
+
+			ssbPath = path.Join(sourceDir, v.Directory, "/ssb.json")
+			fmt.Println("Check ssb file ", ssbPath)
+
+			if _, err := os.Stat(ssbPath); os.IsNotExist(err) {
+				// POST: Ignore product
+				fmt.Println(fmt.Sprintf("Product %s is skipped. ssb.json file not found.", v.Name))
+				continue
+			}
+
+			// Parse ssb.json file
+			manifest, err = ReadVersionsManifestJson(ssbPath)
+		}
+
+		if err != nil {
+			fmt.Println(fmt.Sprintf("Product %s is skipped. Error on parse ssb.json: %s",
+				v.Name, err.Error()))
+			continue
+		}
+
+		if manifest.Name != v.Name {
+			fmt.Println(fmt.Sprintf(
+				"Product %s is skipped. It contains invalid ssb.json file.", v.Name))
+			continue
+		}
+
 		prodManifest := lxd_streams.SimpleStreamsManifestProduct{
 			Architecture:    v.Architecture,
 			OperatingSystem: v.OperatingSystem,
 			Release:         v.Release,
 			ReleaseTitle:    v.ReleaseTitle,
+			Versions:        manifest.Versions,
 		}
 
 		if v.Version != "" {

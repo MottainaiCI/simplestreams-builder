@@ -72,7 +72,7 @@ func newBuildVersionsManifestCommand(config *conf.BuilderTreeConfig) *cobra.Comm
 			manifest, err := images.BuildVersionsManifest(ssp, productDir, config.Prefix)
 			utils.CheckError(err)
 
-			if config.Viper.GetBool("stdout") {
+			if config.Viper.GetBool("stdout-manifest") {
 				images.WriteVersionsManifestJson(manifest, os.Stdout)
 			} else {
 
@@ -107,7 +107,7 @@ func newBuildVersionsManifestCommand(config *conf.BuilderTreeConfig) *cobra.Comm
 
 	var pflags = cmd.PersistentFlags()
 	pflags.Bool("stdout", false, "Print ssb.json to stdout")
-	config.Viper.BindPFlag("stdout", pflags.Lookup("stdout"))
+	config.Viper.BindPFlag("stdout-manifest", pflags.Lookup("stdout"))
 	pflags.StringP("product", "p", "", "Name of the product to elaborate.")
 	config.Viper.BindPFlag("product", pflags.Lookup("product"))
 	pflags.StringP("source-dir", "s", "", "Directory where retrieve images for Manifest.")
