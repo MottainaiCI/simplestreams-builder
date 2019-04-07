@@ -47,12 +47,18 @@ func newBuildIndexCommand(config *conf.BuilderTreeConfig) *cobra.Command {
 				fmt.Println("Use target-dir or stdout option, not both.")
 				os.Exit(1)
 			}
+
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			var f string
+			var f, sourceDir string
 			var err error
 
-			idx, err := index.BuildIndexStruct(config)
+			if config.Viper.Get("source-dir-index") != "" {
+				sourceDir = config.Viper.GetString("source-dir-index")
+			} else {
+				sourceDir = config.Viper.GetString("target-dir")
+			}
+			idx, err := index.BuildIndexStruct(config, sourceDir)
 			utils.CheckError(err)
 
 			if config.Viper.GetBool("stdout") {
@@ -88,6 +94,10 @@ func newBuildIndexCommand(config *conf.BuilderTreeConfig) *cobra.Command {
 	var pflags = cmd.PersistentFlags()
 	pflags.Bool("stdout", false, "Print index.json to stdout")
 	config.Viper.BindPFlag("stdout", pflags.Lookup("stdout"))
+	pflags.StringP("source-dir", "s", "",
+		`Directory where retrieve images manifests.
+If not set source-dir then target-dir is used.`)
+	config.Viper.BindPFlag("source-dir-index", pflags.Lookup("source-dir"))
 
 	return cmd
 }

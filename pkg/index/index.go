@@ -25,16 +25,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path"
+	"strings"
 
 	lxd_streams "github.com/lxc/lxd/shared/simplestreams"
 
 	config "github.com/MottainaiCI/simplestreams-builder/pkg/config"
+	images "github.com/MottainaiCI/simplestreams-builder/pkg/images"
 )
 
-func BuildIndexStruct(config *config.BuilderTreeConfig) (*lxd_streams.SimpleStreamsIndex, error) {
+func BuildIndexStruct(config *config.BuilderTreeConfig, sourceDir string) (*lxd_streams.SimpleStreamsIndex, error) {
 	var ans *lxd_streams.SimpleStreamsIndex
 	var products lxd_streams.SimpleStreamsIndexStream
-	var ipath, prefix string
+	var ipath, prefix, ssbPath string
+	var manifest *images.VersionsSSBuilderManifest
+	var err error
 
 	if config.DataType == "" {
 		return nil, fmt.Errorf("Invalid datatype")
@@ -70,13 +76,58 @@ func BuildIndexStruct(config *config.BuilderTreeConfig) (*lxd_streams.SimpleStre
 
 	products = lxd_streams.SimpleStreamsIndexStream{
 		DataType: config.DataType,
-		Path: fmt.Sprintf("%s%s/images.json",
-			prefix, ipath),
+		Path: fmt.Sprintf("%s/images.json",
+			strings.TrimRight(path.Join(prefix, ipath), "/")),
 		Format: config.Format,
 	}
 
 	for _, v := range config.Products {
 		if v.Hidden {
+			continue
+		}
+
+		// For every product I try to retrieve ssb.json file
+		// for set versions map.
+		if v.PrefixPath != "" {
+
+			ssbPath = fmt.Sprintf("%s/%s/ssb.json",
+				strings.TrimRight(v.PrefixPath, "/"),
+				strings.TrimRight(v.Directory, "/"),
+			)
+			// Fetch and parse remote ssb.json file
+			manifest, err = images.ReadVersionsManifestJsonFromUrl(ssbPath)
+
+		} else {
+			// POST: Try to search ssb.json file under local filesystem.
+
+			if sourceDir == "" {
+				return nil, fmt.Errorf(
+					"Product %s without prefix_path but source-dir is empty.",
+					v.Name)
+			}
+
+			ssbPath = path.Join(sourceDir, v.Directory, "/ssb.json")
+			fmt.Println("ssb Path ", ssbPath)
+
+			if _, err := os.Stat(ssbPath); os.IsNotExist(err) {
+				// POST: Ignore product
+				fmt.Println(fmt.Sprintf("Product %s is skipped. ssb.json file not found.", v.Name))
+				continue
+			}
+
+			// Parse ssb.json file
+			manifest, err = images.ReadVersionsManifestJson(ssbPath)
+		}
+
+		if err != nil {
+			fmt.Println(fmt.Sprintf("Product %s is skipped. Error on parse ssb.json: %s",
+				v.Name, err.Error()))
+			continue
+		}
+
+		if manifest.Name != v.Name {
+			fmt.Println(fmt.Sprintf(
+				"Product %s is skipped. It contains invalid ssb.json file.", v.Name))
 			continue
 		}
 
