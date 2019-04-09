@@ -67,6 +67,7 @@ func initCommand(rootCmd *cobra.Command, config *conf.BuilderTreeConfig) {
 		newBuildIndexCommand(config),
 		newBuildVersionsManifestCommand(config),
 		newBuildImagesFileCommand(config),
+		newBuildProductCommand(config),
 	)
 }
 

@@ -38,6 +38,7 @@ type SimpleStreamsProduct struct {
 	PrefixPath      string   `mapstructure:"prefix_path"`
 	Aliases         []string `mapstructure:"aliases"`
 	Hidden          bool     `mapstructure:"hidden"`
+	Days            int      `mapstructure:"days"`
 }
 
 type BuilderTreeConfig struct {
@@ -70,7 +71,20 @@ func (b *BuilderTreeConfig) Unmarshal() error {
 	var err error
 
 	err = b.Viper.ReadInConfig()
+	if err != nil {
+		return err
+	}
+
 	err = b.Viper.Unmarshal(&b)
+	if err != nil {
+		return err
+	}
+
+	for idx, v := range b.Products {
+		if v.Days <= 0 {
+			b.Products[idx].Days = 1
+		}
+	}
 
 	return err
 }
@@ -111,11 +125,12 @@ func (p *SimpleStreamsProduct) String() string {
 	version: %s
 	prefix_path: %s
 	hidden: %v
+	days: %d
 	aliases: %s`,
 		p.Name, p.Architecture, p.Release,
 		p.ReleaseTitle, p.OperatingSystem,
 		p.Directory, p.Version, p.PrefixPath,
-		p.Hidden, p.Aliases)
+		p.Hidden, p.Days, p.Aliases)
 
 	return ans
 }

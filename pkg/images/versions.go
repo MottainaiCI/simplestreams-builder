@@ -32,6 +32,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"time"
 
 	lxd_streams "github.com/lxc/lxd/shared/simplestreams"
@@ -86,8 +87,9 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 			Items: make(map[string]lxd_streams.SimpleStreamsManifestProductVersionItem),
 		}
 
-		productBasePath = fmt.Sprintf("%s/%s/%s", prefix, product.Directory, f.Name())
-		itemDir = fmt.Sprintf("%s/%s", productDir, f.Name())
+		productBasePath = path.Join(prefix,
+			path.Join(product.Directory, f.Name()))
+		itemDir = path.Join(productDir, f.Name())
 
 		item, _ = checkItem("rootfs.squashfs", itemDir, productBasePath)
 		if item != nil {

@@ -39,6 +39,8 @@ products:
     os: Sabayon
     directory: sbi/sabayon-base
     #hidden: true
+    # Define number of images maintains for the product. Default is 1 day/image.
+    #days: 1
     aliases:
       - "sabayon/base"
 

@@ -25,7 +25,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	path "path/filepath"
+	"path"
+	"strings"
 
 	utils "github.com/MottainaiCI/mottainai-server/pkg/utils"
 	"github.com/spf13/cobra"
@@ -62,7 +63,7 @@ func newBuildVersionsManifestCommand(config *conf.BuilderTreeConfig) *cobra.Comm
 			}
 
 			if ssp == nil {
-				fmt.Println("No product found with name " + config.Viper.Get("product").(string))
+				fmt.Println("No product found with name " + config.Viper.GetString("product"))
 				os.Exit(1)
 			}
 
@@ -77,8 +78,12 @@ func newBuildVersionsManifestCommand(config *conf.BuilderTreeConfig) *cobra.Comm
 			} else {
 
 				if config.Viper.Get("target-dir") != "" {
-					f = fmt.Sprintf("%s/%s/ssb.json", config.Viper.Get("target-dir"),
-						ssp.Directory)
+					f = fmt.Sprintf("%s/ssb.json",
+						strings.TrimRight(
+							path.Join(config.Viper.GetString("target-dir"), ssp.Directory),
+							"/",
+						),
+					)
 				} else {
 					// I write files under source dir
 					f = fmt.Sprintf("%s/ssb.json", productDir)
