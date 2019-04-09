@@ -393,7 +393,7 @@ func (s *storageZfs) StoragePoolUmount() (bool, error) {
 func (s *storageZfs) StoragePoolVolumeCreate() error {
 	logger.Infof("Creating ZFS storage volume \"%s\" on storage pool \"%s\"", s.volume.Name, s.pool.Name)
 
-	isSnapshot := strings.Contains(s.volume.Name, "/")
+	isSnapshot := shared.IsSnapshot(s.volume.Name)
 
 	var fs string
 
@@ -507,7 +507,7 @@ func (s *storageZfs) StoragePoolVolumeDelete() error {
 				return err
 			}
 
-			err = zfsPoolVolumeRename(poolName, fs, fmt.Sprintf("deleted/custom/%s", uuid.NewRandom().String()))
+			err = zfsPoolVolumeRename(poolName, fs, fmt.Sprintf("deleted/custom/%s", uuid.NewRandom().String()), true)
 			if err != nil {
 				return err
 			}
@@ -748,7 +748,7 @@ func (s *storageZfs) StoragePoolVolumeRename(newName string) error {
 			s.volume.Name, s.pool.Name)
 	}
 
-	isSnapshot := strings.Contains(s.volume.Name, "/")
+	isSnapshot := shared.IsSnapshot(s.volume.Name)
 
 	var oldPath string
 	var newPath string
@@ -761,7 +761,7 @@ func (s *storageZfs) StoragePoolVolumeRename(newName string) error {
 		newPath = fmt.Sprintf("custom/%s", newName)
 	}
 	poolName := s.getOnDiskPoolName()
-	err = zfsPoolVolumeRename(poolName, oldPath, newPath)
+	err = zfsPoolVolumeRename(poolName, oldPath, newPath, false)
 	if err != nil {
 		return err
 	}
@@ -917,13 +917,6 @@ func (s *storageZfs) ContainerCreateFromImage(container container, fingerprint s
 	err = createContainerMountpoint(containerPoolVolumeMntPoint, containerPath, privileged)
 	if err != nil {
 		return err
-	}
-
-	if !privileged {
-		err = s.shiftRootfs(container, zfsIdmapSetSkipper)
-		if err != nil {
-			return err
-		}
 	}
 
 	err = container.TemplateApply("create")
@@ -1453,7 +1446,7 @@ func (s *storageZfs) ContainerRename(container container, newName string) error 
 	// Rename the dataset.
 	oldZfsDataset := fmt.Sprintf("containers/%s", oldName)
 	newZfsDataset := fmt.Sprintf("containers/%s", newName)
-	err = zfsPoolVolumeRename(poolName, oldZfsDataset, newZfsDataset)
+	err = zfsPoolVolumeRename(poolName, oldZfsDataset, newZfsDataset, false)
 	if err != nil {
 		return err
 	}
@@ -2370,7 +2363,7 @@ func (s *storageZfs) ImageCreate(fingerprint string, tracker *ioprogress.Progres
 	}()
 
 	if zfsFilesystemEntityExists(poolName, fmt.Sprintf("deleted/%s", fs)) {
-		if err := zfsPoolVolumeRename(poolName, fmt.Sprintf("deleted/%s", fs), fs); err != nil {
+		if err := zfsPoolVolumeRename(poolName, fmt.Sprintf("deleted/%s", fs), fs, true); err != nil {
 			return err
 		}
 
@@ -2499,7 +2492,7 @@ func (s *storageZfs) ImageDelete(fingerprint string) error {
 				return err
 			}
 
-			if err := zfsPoolVolumeRename(poolName, fs, fmt.Sprintf("deleted/%s", fs)); err != nil {
+			if err := zfsPoolVolumeRename(poolName, fs, fmt.Sprintf("deleted/%s", fs), true); err != nil {
 				return err
 			}
 		}
@@ -2973,15 +2966,15 @@ func (s *storageZfs) doCrossPoolStorageVolumeCopy(source *api.StorageVolumeSourc
 		return err
 	}
 
-	ourMount, err := srcStorage.StoragePoolVolumeMount()
+	ourMount, err := srcStorage.StoragePoolMount()
 	if err != nil {
-		logger.Errorf("Failed to mount ZFS storage volume \"%s\" on storage pool \"%s\": %s", s.volume.Name, s.pool.Name, err)
 		return err
 	}
 	if ourMount {
-		defer srcStorage.StoragePoolVolumeUmount()
+		defer srcStorage.StoragePoolUmount()
 	}
 
+	// Create the main volume
 	err = s.StoragePoolVolumeCreate()
 	if err != nil {
 		logger.Errorf("Failed to create ZFS storage volume \"%s\" on storage pool \"%s\": %s", s.volume.Name, s.pool.Name, err)
@@ -2997,10 +2990,38 @@ func (s *storageZfs) doCrossPoolStorageVolumeCopy(source *api.StorageVolumeSourc
 		defer s.StoragePoolVolumeUmount()
 	}
 
-	srcMountPoint := getStoragePoolVolumeMountPoint(source.Pool, source.Name)
 	dstMountPoint := getStoragePoolVolumeMountPoint(s.pool.Name, s.volume.Name)
-
 	bwlimit := s.pool.Config["rsync.bwlimit"]
+
+	snapshots, err := storagePoolVolumeSnapshotsGet(s.s, source.Pool, source.Name, storagePoolVolumeTypeCustom)
+	if err != nil {
+		return err
+	}
+
+	if !source.VolumeOnly {
+		for _, snap := range snapshots {
+			srcMountPoint := getStoragePoolVolumeSnapshotMountPoint(source.Pool, snap)
+
+			_, err = rsyncLocalCopy(srcMountPoint, dstMountPoint, bwlimit)
+			if err != nil {
+				logger.Errorf("Failed to rsync into ZFS storage volume \"%s\" on storage pool \"%s\": %s", s.volume.Name, s.pool.Name, err)
+				return err
+			}
+
+			_, snapOnlyName, _ := containerGetParentAndSnapshotName(source.Name)
+
+			s.StoragePoolVolumeSnapshotCreate(&api.StorageVolumeSnapshotsPost{Name: fmt.Sprintf("%s/%s", s.volume.Name, snapOnlyName)})
+		}
+	}
+
+	var srcMountPoint string
+
+	if strings.Contains(source.Name, "/") {
+		srcMountPoint = getStoragePoolVolumeSnapshotMountPoint(source.Pool, source.Name)
+	} else {
+		srcMountPoint = getStoragePoolVolumeMountPoint(source.Pool, source.Name)
+	}
+
 	_, err = rsyncLocalCopy(srcMountPoint, dstMountPoint, bwlimit)
 	if err != nil {
 		os.RemoveAll(dstMountPoint)
@@ -3013,7 +3034,7 @@ func (s *storageZfs) doCrossPoolStorageVolumeCopy(source *api.StorageVolumeSourc
 }
 
 func (s *storageZfs) copyVolumeWithoutSnapshotsFull(source *api.StorageVolumeSource) error {
-	sourceIsSnapshot := strings.Contains(source.Name, "/")
+	sourceIsSnapshot := shared.IsSnapshot(source.Name)
 
 	var snapshotSuffix string
 	var sourceDataset string
@@ -3174,14 +3195,19 @@ func (s *storageZfs) StoragePoolVolumeCopy(source *api.StorageVolumeSource) erro
 	}
 
 	var snapshots []string
-	var err error
 
 	poolName := s.getOnDiskPoolName()
 
-	if !strings.Contains(source.Name, "/") {
-		snapshots, err = zfsPoolListSnapshots(poolName, fmt.Sprintf("custom/%s", source.Name))
+	if !shared.IsSnapshot(source.Name) {
+		allSnapshots, err := zfsPoolListSnapshots(poolName, fmt.Sprintf("custom/%s", source.Name))
 		if err != nil {
 			return err
+		}
+
+		for _, snap := range allSnapshots {
+			if strings.HasPrefix(snap, "snapshot-") {
+				snapshots = append(snapshots, strings.TrimPrefix(snap, "snapshot-"))
+			}
 		}
 	}
 
@@ -3200,8 +3226,66 @@ func (s *storageZfs) StoragePoolVolumeCopy(source *api.StorageVolumeSource) erro
 			return err
 		}
 	} else {
+		targetVolumeMountPoint := getStoragePoolVolumeMountPoint(poolName, s.volume.Name)
+
+		err := os.MkdirAll(targetVolumeMountPoint, 0711)
+		if err != nil {
+			return err
+		}
+
+		prev := ""
+		prevSnapOnlyName := ""
+
+		for i, snap := range snapshots {
+			if i > 0 {
+				prev = snapshots[i-1]
+			}
+
+			sourceDataset := fmt.Sprintf("%s/custom/%s@snapshot-%s", poolName, source.Name, snap)
+			targetDataset := fmt.Sprintf("%s/custom/%s@snapshot-%s", poolName, s.volume.Name, snap)
+
+			snapshotMntPoint := getStoragePoolVolumeSnapshotMountPoint(poolName, fmt.Sprintf("%s/%s", s.volume.Name, snap))
+
+			err := os.MkdirAll(snapshotMntPoint, 0700)
+			if err != nil {
+				return err
+			}
+
+			prevSnapOnlyName = snap
+
+			args := []string{"send", sourceDataset}
+
+			if prev != "" {
+				parentDataset := fmt.Sprintf("%s/custom/%s/snapshot-%s", poolName, source.Name, prev)
+				args = append(args, "-i", parentDataset)
+			}
+
+			zfsSendCmd := exec.Command("zfs", args...)
+			zfsRecvCmd := exec.Command("zfs", "receive", "-F", targetDataset)
+
+			zfsRecvCmd.Stdin, _ = zfsSendCmd.StdoutPipe()
+			zfsRecvCmd.Stdout = os.Stdout
+			zfsRecvCmd.Stderr = os.Stderr
+
+			err = zfsRecvCmd.Start()
+			if err != nil {
+				return err
+			}
+
+			err = zfsSendCmd.Run()
+			if err != nil {
+				return err
+			}
+
+			err = zfsRecvCmd.Wait()
+			if err != nil {
+				return err
+			}
+		}
+
 		tmpSnapshotName := fmt.Sprintf("copy-send-%s", uuid.NewRandom().String())
-		err := zfsPoolVolumeSnapshotCreate(poolName, fmt.Sprintf("custom/%s", source.Name), tmpSnapshotName)
+
+		err = zfsPoolVolumeSnapshotCreate(poolName, fmt.Sprintf("custom/%s", source.Name), tmpSnapshotName)
 		if err != nil {
 			return err
 		}
@@ -3209,7 +3293,12 @@ func (s *storageZfs) StoragePoolVolumeCopy(source *api.StorageVolumeSource) erro
 		defer zfsPoolVolumeSnapshotDestroy(poolName, fmt.Sprintf("custom/%s", source.Name), tmpSnapshotName)
 
 		currentSnapshotDataset := fmt.Sprintf("%s/custom/%s@%s", poolName, source.Name, tmpSnapshotName)
-		args := []string{"send", "-R", currentSnapshotDataset}
+
+		args := []string{"send", currentSnapshotDataset}
+
+		if prevSnapOnlyName != "" {
+			args = append(args, "-i", fmt.Sprintf("%s/custom/%s@snapshot-%s", poolName, source.Name, prevSnapOnlyName))
+		}
 
 		zfsSendCmd := exec.Command("zfs", args...)
 		targetDataset := fmt.Sprintf("%s/custom/%s", poolName, s.volume.Name)

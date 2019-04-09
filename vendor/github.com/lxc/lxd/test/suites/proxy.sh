@@ -24,8 +24,9 @@ test_proxy_device_tcp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -39,8 +40,9 @@ test_proxy_device_tcp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -54,8 +56,9 @@ test_proxy_device_tcp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -73,10 +76,12 @@ test_proxy_device_tcp() {
   NSENTER_PID1=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
-  ECHO1=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT2}")
-  kill -9 "${NSENTER_PID1}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
+  ECHO1=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT2}")
+  kill "${NSENTER_PID1}" 2>/dev/null || true
+  wait "${NSENTER_PID1}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -160,15 +165,17 @@ test_proxy_device_unix() {
   # Initial test
   lxc config device add proxyTester proxyDev proxy "listen=unix:${HOST_SOCK}" connect=unix:/tmp/"lxdtest-$(basename "${LXD_DIR}").sock" bind=host
   (
-    cd "${LXD_DIR}/containers/proxyTester/rootfs/tmp/" || exit
+    PID="$(lxc query /1.0/containers/proxyTester/state | jq .pid)"
+    cd "/proc/${PID}/root/tmp/" || exit
     umask 0000
-    exec nsenter -n -U -t "$(lxc query /1.0/containers/proxyTester/state | jq .pid)" -- socat unix-listen:"lxdtest-$(basename "${LXD_DIR}").sock",unlink-early exec:/bin/cat
+    exec nsenter -n -U -t "${PID}" -- socat unix-listen:"lxdtest-$(basename "${LXD_DIR}").sock",unlink-early exec:/bin/cat
   ) &
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - unix:"${HOST_SOCK#$(pwd)/}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - unix:"${HOST_SOCK#$(pwd)/}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -181,15 +188,17 @@ test_proxy_device_unix() {
   # Restart the container
   lxc restart -f proxyTester
   (
-    cd "${LXD_DIR}/containers/proxyTester/rootfs/tmp/" || exit
+    PID="$(lxc query /1.0/containers/proxyTester/state | jq .pid)"
+    cd "/proc/${PID}/root/tmp/" || exit
     umask 0000
-    exec nsenter -n -U -t "$(lxc query /1.0/containers/proxyTester/state | jq .pid)" -- socat unix-listen:"lxdtest-$(basename "${LXD_DIR}").sock",unlink-early exec:/bin/cat
+    exec nsenter -n -U -t "${PID}" -- socat unix-listen:"lxdtest-$(basename "${LXD_DIR}").sock",unlink-early exec:/bin/cat
   ) &
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - unix:"${HOST_SOCK#$(pwd)/}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - unix:"${HOST_SOCK#$(pwd)/}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -202,15 +211,17 @@ test_proxy_device_unix() {
   # Change the socket
   lxc config device set proxyTester proxyDev connect unix:/tmp/"lxdtest-$(basename "${LXD_DIR}")-2.sock"
   (
-    cd "${LXD_DIR}/containers/proxyTester/rootfs/tmp/" || exit
+    PID="$(lxc query /1.0/containers/proxyTester/state | jq .pid)"
+    cd "/proc/${PID}/root/tmp/" || exit
     umask 0000
-    exec nsenter -n -U -t "$(lxc query /1.0/containers/proxyTester/state | jq .pid)" -- socat unix-listen:"lxdtest-$(basename "${LXD_DIR}")-2.sock",unlink-early exec:/bin/cat
+    exec nsenter -n -U -t "${PID}" -- socat unix-listen:"lxdtest-$(basename "${LXD_DIR}")-2.sock",unlink-early exec:/bin/cat
   ) &
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - unix:"${HOST_SOCK#$(pwd)/}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - unix:"${HOST_SOCK#$(pwd)/}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -237,15 +248,17 @@ test_proxy_device_tcp_unix() {
   # Initial test
   lxc config device add proxyTester proxyDev proxy "listen=tcp:127.0.0.1:${HOST_TCP_PORT}" connect=unix:/tmp/"lxdtest-$(basename "${LXD_DIR}").sock" bind=host
   (
-    cd "${LXD_DIR}/containers/proxyTester/rootfs/tmp/" || exit
+    PID="$(lxc query /1.0/containers/proxyTester/state | jq .pid)"
+    cd "/proc/${PID}/root/tmp/" || exit
     umask 0000
-    exec nsenter -n -U -t "$(lxc query /1.0/containers/proxyTester/state | jq .pid)" -- socat unix-listen:"lxdtest-$(basename "${LXD_DIR}").sock",unlink-early exec:/bin/cat
+    exec nsenter -n -U -t "${PID}" -- socat unix-listen:"lxdtest-$(basename "${LXD_DIR}").sock",unlink-early exec:/bin/cat
   ) &
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -256,15 +269,17 @@ test_proxy_device_tcp_unix() {
   # Restart the container
   lxc restart -f proxyTester
   (
-    cd "${LXD_DIR}/containers/proxyTester/rootfs/tmp/" || exit
+    PID="$(lxc query /1.0/containers/proxyTester/state | jq .pid)"
+    cd "/proc/${PID}/root/tmp/" || exit
     umask 0000
-    exec nsenter -n -U -t "$(lxc query /1.0/containers/proxyTester/state | jq .pid)" -- socat unix-listen:"lxdtest-$(basename "${LXD_DIR}").sock",unlink-early exec:/bin/cat
+    exec nsenter -n -U -t "${PID}" -- socat unix-listen:"lxdtest-$(basename "${LXD_DIR}").sock",unlink-early exec:/bin/cat
   ) &
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -275,15 +290,17 @@ test_proxy_device_tcp_unix() {
   # Change the socket
   lxc config device set proxyTester proxyDev connect unix:/tmp/"lxdtest-$(basename "${LXD_DIR}")-2.sock"
   (
-    cd "${LXD_DIR}/containers/proxyTester/rootfs/tmp/" || exit
+    PID="$(lxc query /1.0/containers/proxyTester/state | jq .pid)"
+    cd "/proc/${PID}/root/tmp/" || exit
     umask 0000
-    exec nsenter -n -U -t "$(lxc query /1.0/containers/proxyTester/state | jq .pid)" -- socat unix-listen:"lxdtest-$(basename "${LXD_DIR}")-2.sock",unlink-early exec:/bin/cat
+    exec nsenter -n -U -t "${PID}" -- socat unix-listen:"lxdtest-$(basename "${LXD_DIR}")-2.sock",unlink-early exec:/bin/cat
   ) &
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -311,8 +328,9 @@ test_proxy_device_unix_tcp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - unix:"${HOST_SOCK#$(pwd)/}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - unix:"${HOST_SOCK#$(pwd)/}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -328,8 +346,9 @@ test_proxy_device_unix_tcp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - unix:"${HOST_SOCK#$(pwd)/}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - unix:"${HOST_SOCK#$(pwd)/}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -345,8 +364,9 @@ test_proxy_device_unix_tcp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - unix:"${HOST_SOCK#$(pwd)/}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - unix:"${HOST_SOCK#$(pwd)/}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -376,8 +396,9 @@ test_proxy_device_udp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - udp:127.0.0.1:"${HOST_UDP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - udp:127.0.0.1:"${HOST_UDP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -391,8 +412,9 @@ test_proxy_device_udp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - udp:127.0.0.1:"${HOST_UDP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - udp:127.0.0.1:"${HOST_UDP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -406,8 +428,9 @@ test_proxy_device_udp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - udp:127.0.0.1:"${HOST_UDP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - udp:127.0.0.1:"${HOST_UDP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -435,8 +458,9 @@ test_proxy_device_unix_udp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - unix:"${HOST_SOCK#$(pwd)/}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - unix:"${HOST_SOCK#$(pwd)/}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -452,8 +476,9 @@ test_proxy_device_unix_udp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - unix:"${HOST_SOCK#$(pwd)/}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - unix:"${HOST_SOCK#$(pwd)/}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -469,8 +494,9 @@ test_proxy_device_unix_udp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - unix:"${HOST_SOCK#$(pwd)/}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - unix:"${HOST_SOCK#$(pwd)/}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -500,8 +526,9 @@ test_proxy_device_tcp_udp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -515,8 +542,9 @@ test_proxy_device_tcp_udp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"
@@ -530,8 +558,9 @@ test_proxy_device_tcp_udp() {
   NSENTER_PID=$!
   sleep 0.5
 
-  ECHO=$( (echo "${MESSAGE}" ; sleep 0.1) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
-  kill -9 "${NSENTER_PID}" 2>/dev/null || true
+  ECHO=$( (echo "${MESSAGE}" ; sleep 0.5) | socat - tcp:127.0.0.1:"${HOST_TCP_PORT}")
+  kill "${NSENTER_PID}" 2>/dev/null || true
+  wait "${NSENTER_PID}" 2>/dev/null || true
 
   if [ "${ECHO}" != "${MESSAGE}" ]; then
     cat "${LXD_DIR}/logs/proxyTester/proxy.proxyDev.log"

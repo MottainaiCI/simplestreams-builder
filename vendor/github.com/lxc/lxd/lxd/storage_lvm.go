@@ -481,6 +481,7 @@ func (s *storageLvm) StoragePoolVolumeCreate() error {
 	logger.Infof("Creating LVM storage volume \"%s\" on storage pool \"%s\"", s.volume.Name, s.pool.Name)
 	tryUndo := true
 
+	volumeLvmName := containerNameToLVName(s.volume.Name)
 	poolName := s.getOnDiskPoolName()
 	thinPoolName := s.getLvmThinpoolName()
 	lvFsType := s.getLvmFilesystem()
@@ -501,7 +502,7 @@ func (s *storageLvm) StoragePoolVolumeCreate() error {
 		}
 	}
 
-	err = lvmCreateLv("default", poolName, thinPoolName, s.volume.Name, lvFsType, lvSize, volumeType, s.useThinpool)
+	err = lvmCreateLv("default", poolName, thinPoolName, volumeLvmName, lvFsType, lvSize, volumeType, s.useThinpool)
 	if err != nil {
 		return fmt.Errorf("Error Creating LVM LV for new image: %v", err)
 	}
@@ -539,9 +540,10 @@ func (s *storageLvm) StoragePoolVolumeCreate() error {
 func (s *storageLvm) StoragePoolVolumeDelete() error {
 	logger.Infof("Deleting LVM storage volume \"%s\" on storage pool \"%s\"", s.volume.Name, s.pool.Name)
 
+	volumeLvmName := containerNameToLVName(s.volume.Name)
 	poolName := s.getOnDiskPoolName()
 	customLvmDevPath := getLvmDevPath("default", poolName,
-		storagePoolVolumeAPIEndpointCustom, s.volume.Name)
+		storagePoolVolumeAPIEndpointCustom, volumeLvmName)
 	lvExists, _ := storageLVExists(customLvmDevPath)
 
 	if lvExists {
@@ -557,7 +559,7 @@ func (s *storageLvm) StoragePoolVolumeDelete() error {
 	}
 
 	if lvExists {
-		err = removeLV("default", poolName, volumeType, s.volume.Name)
+		err = removeLV("default", poolName, volumeType, volumeLvmName)
 		if err != nil {
 			return err
 		}
@@ -587,6 +589,7 @@ func (s *storageLvm) StoragePoolVolumeDelete() error {
 func (s *storageLvm) StoragePoolVolumeMount() (bool, error) {
 	logger.Debugf("Mounting LVM storage volume \"%s\" on storage pool \"%s\"", s.volume.Name, s.pool.Name)
 
+	volumeLvmName := containerNameToLVName(s.volume.Name)
 	customPoolVolumeMntPoint := getStoragePoolVolumeMountPoint(s.pool.Name, s.volume.Name)
 	poolName := s.getOnDiskPoolName()
 	lvFsType := s.getLvmFilesystem()
@@ -594,7 +597,7 @@ func (s *storageLvm) StoragePoolVolumeMount() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	lvmVolumePath := getLvmDevPath("default", poolName, volumeType, s.volume.Name)
+	lvmVolumePath := getLvmDevPath("default", poolName, volumeType, volumeLvmName)
 
 	customMountLockID := getCustomMountLockID(s.pool.Name, s.volume.Name)
 	lxdStorageMapLock.Lock()
@@ -808,7 +811,7 @@ func (s *storageLvm) StoragePoolVolumeUpdate(writable *api.StorageVolumePut,
 		}
 
 		sourceLvmName := containerNameToLVName(fmt.Sprintf("%s/%s", s.volume.Name, writable.Restore))
-		targetLvmName := s.volume.Name
+		targetLvmName := containerNameToLVName(s.volume.Name)
 
 		if s.useThinpool {
 			poolName := s.getOnDiskPoolName()
@@ -898,7 +901,10 @@ func (s *storageLvm) StoragePoolVolumeRename(newName string) error {
 			s.volume.Name, s.pool.Name)
 	}
 
-	err = s.renameLVByPath("default", s.volume.Name, newName,
+	sourceLVName := containerNameToLVName(s.volume.Name)
+	targetLVName := containerNameToLVName(newName)
+
+	err = s.renameLVByPath("default", sourceLVName, targetLVName,
 		storagePoolVolumeAPIEndpointCustom)
 	if err != nil {
 		return fmt.Errorf(`Failed to rename logical volume from "%s" to "%s": %s`,
@@ -1057,13 +1063,6 @@ func (s *storageLvm) ContainerCreateFromImage(container container, fingerprint s
 	}
 	if err != nil {
 		return errors.Wrap(err, "Set mount point permissions")
-	}
-
-	if !container.IsPrivileged() {
-		err := s.shiftRootfs(container, nil)
-		if err != nil {
-			return errors.Wrap(err, "Shift rootfs")
-		}
 	}
 
 	err = container.TemplateApply("create")
@@ -2119,7 +2118,8 @@ func (s *storageLvm) StorageEntitySetQuota(volumeType int, size int64, data inte
 		lvDevPath = getLvmDevPath("default", poolName, storagePoolVolumeAPIEndpointContainers, ctLvmName)
 		mountpoint = getContainerMountPoint("default", s.pool.Name, ctName)
 	default:
-		lvDevPath = getLvmDevPath("default", poolName, storagePoolVolumeAPIEndpointCustom, s.volume.Name)
+		customLvmName := containerNameToLVName(s.volume.Name)
+		lvDevPath = getLvmDevPath("default", poolName, storagePoolVolumeAPIEndpointCustom, customLvmName)
 		mountpoint = getStoragePoolVolumeMountPoint(s.pool.Name, s.volume.Name)
 	}
 
@@ -2201,91 +2201,47 @@ func (s *storageLvm) StoragePoolVolumeCopy(source *api.StorageVolumeSource) erro
 	logger.Infof("Copying LVM storage volume \"%s\" on storage pool \"%s\" as \"%s\" to storage pool \"%s\"", source.Name, source.Pool, s.volume.Name, s.pool.Name)
 	successMsg := fmt.Sprintf("Copied LVM storage volume \"%s\" on storage pool \"%s\" as \"%s\" to storage pool \"%s\"", source.Name, source.Pool, s.volume.Name, s.pool.Name)
 
-	srcMountPoint := getStoragePoolVolumeMountPoint(source.Pool, source.Name)
-	dstMountPoint := getStoragePoolVolumeMountPoint(s.pool.Name, s.volume.Name)
+	if s.pool.Name != source.Pool {
+		// Cross-pool copy
+		// setup storage for the source volume
+		srcStorage, err := storagePoolVolumeInit(s.s, "default", source.Pool, source.Name, storagePoolVolumeTypeCustom)
+		if err != nil {
+			return err
+		}
 
-	sourceName := source.Name
-	targetName := s.volume.Name
-
-	if strings.Contains(sourceName, "/") {
-		sourceName = containerNameToLVName(sourceName)
+		ourMount, err := srcStorage.StoragePoolMount()
+		if err != nil {
+			return err
+		}
+		if ourMount {
+			defer srcStorage.StoragePoolUmount()
+		}
 	}
 
-	if strings.Contains(targetName, "/") {
-		targetName = containerNameToLVName(targetName)
+	err := s.copyVolume(source.Pool, source.Name)
+	if err != nil {
+		return err
 	}
 
-	if s.pool.Name == source.Pool && s.useThinpool {
-		err := os.MkdirAll(dstMountPoint, 0711)
-		if err != nil {
-			logger.Errorf("Failed to create mountpoint \"%s\" for LVM storage volume \"%s\" on storage pool \"%s\": %s", dstMountPoint, s.volume.Name, s.pool.Name, err)
-			return err
-		}
-
-		poolName := s.getOnDiskPoolName()
-		lvFsType := s.getLvmFilesystem()
-		lvSize, err := s.getLvmVolumeSize()
-		if lvSize == "" {
-			logger.Errorf("Failed to get size for LVM storage volume \"%s\" on storage pool \"%s\": %s", s.volume.Name, s.pool.Name, err)
-			return err
-		}
-
-		_, err = s.createSnapshotLV("default", poolName, sourceName, storagePoolVolumeAPIEndpointCustom, targetName, storagePoolVolumeAPIEndpointCustom, false, s.useThinpool)
-		if err != nil {
-			logger.Errorf("Failed to create snapshot for LVM storage volume \"%s\" on storage pool \"%s\": %s", s.volume.Name, s.pool.Name, err)
-			return err
-		}
-
-		lvDevPath := getLvmDevPath("default", poolName, storagePoolVolumeAPIEndpointCustom, targetName)
-		msg, err := fsGenerateNewUUID(lvFsType, lvDevPath)
-		if err != nil {
-			logger.Errorf("Failed to create new UUID for filesystem \"%s\" for RBD storage volume \"%s\" on storage pool \"%s\": %s: %s", lvFsType, s.volume.Name, s.pool.Name, msg, err)
-			return err
-		}
-
+	if source.VolumeOnly {
 		logger.Infof(successMsg)
 		return nil
 	}
 
-	if s.pool.Name != source.Pool {
-		// setup storage for the source volume
-		srcStorage, err := storagePoolVolumeInit(s.s, "default", source.Pool, source.Name, storagePoolVolumeTypeCustom)
+	snapshots, err := storagePoolVolumeSnapshotsGet(s.s, source.Pool, source.Name, storagePoolVolumeTypeCustom)
+	if err != nil {
+		return err
+	}
+
+	if len(snapshots) == 0 {
+		return nil
+	}
+
+	for _, snap := range snapshots {
+		err = s.copyVolumeSnapshot(source.Pool, snap)
 		if err != nil {
-			logger.Errorf("Failed to initialize LVM storage volume \"%s\" on storage pool \"%s\": %s", s.volume.Name, s.pool.Name, err)
 			return err
 		}
-
-		ourMount, err := srcStorage.StoragePoolVolumeMount()
-		if err != nil {
-			logger.Errorf("Failed to mount LVM storage volume \"%s\" on storage pool \"%s\": %s", s.volume.Name, s.pool.Name, err)
-			return err
-		}
-
-		if ourMount {
-			defer srcStorage.StoragePoolVolumeUmount()
-		}
-	}
-
-	err := s.StoragePoolVolumeCreate()
-	if err != nil {
-		logger.Errorf("Failed to create LVM storage volume \"%s\" on storage pool \"%s\": %s", s.volume.Name, s.pool.Name, err)
-		return err
-	}
-
-	ourMount, err := s.StoragePoolVolumeMount()
-	if err != nil {
-		return err
-	}
-	if ourMount {
-		defer s.StoragePoolVolumeUmount()
-	}
-
-	bwlimit := s.pool.Config["rsync.bwlimit"]
-	_, err = rsyncLocalCopy(srcMountPoint, dstMountPoint, bwlimit)
-	if err != nil {
-		os.RemoveAll(dstMountPoint)
-		logger.Errorf("Failed to rsync into LVM storage volume \"%s\" on storage pool \"%s\": %s", s.volume.Name, s.pool.Name, err)
-		return err
 	}
 
 	logger.Infof(successMsg)
@@ -2321,8 +2277,10 @@ func (s *storageLvm) StoragePoolVolumeSnapshotCreate(target *api.StorageVolumeSn
 		return fmt.Errorf("Not a snapshot")
 	}
 
+	sourceLvmName := containerNameToLVName(sourceOnlyName)
 	targetLvmName := containerNameToLVName(target.Name)
-	_, err := s.createSnapshotLV("default", poolName, sourceOnlyName, storagePoolVolumeAPIEndpointCustom, targetLvmName, storagePoolVolumeAPIEndpointCustom, true, s.useThinpool)
+
+	_, err := s.createSnapshotLV("default", poolName, sourceLvmName, storagePoolVolumeAPIEndpointCustom, targetLvmName, storagePoolVolumeAPIEndpointCustom, true, s.useThinpool)
 	if err != nil {
 		return fmt.Errorf("Failed to create snapshot logical volume %s", err)
 	}
@@ -2400,7 +2358,10 @@ func (s *storageLvm) StoragePoolVolumeSnapshotRename(newName string) error {
 	}
 	fullSnapshotName := fmt.Sprintf("%s%s%s", sourceName, shared.SnapshotDelimiter, newName)
 
-	err = s.renameLVByPath("default", s.volume.Name, fullSnapshotName, storagePoolVolumeAPIEndpointCustom)
+	sourceLVName := containerNameToLVName(s.volume.Name)
+	targetLVName := containerNameToLVName(fullSnapshotName)
+
+	err = s.renameLVByPath("default", sourceLVName, targetLVName, storagePoolVolumeAPIEndpointCustom)
 	if err != nil {
 		return fmt.Errorf("Failed to rename logical volume from \"%s\" to \"%s\": %s", s.volume.Name, newName, err)
 	}

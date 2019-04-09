@@ -337,7 +337,7 @@ func (s *migrationSourceWs) Do(migrateOp *operation) error {
 
 	idmaps := make([]*migration.IDMapType, 0)
 
-	idmapset, err := s.container.LastIdmapSet()
+	idmapset, err := s.container.DiskIdmap()
 	if err != nil {
 		return err
 	}
@@ -983,7 +983,7 @@ func (c *migrationSink) Do(migrateOp *operation) error {
 				return
 			}
 
-			err = ShiftIfNecessary(c.src.container, srcIdmap)
+			err = resetContainerDiskIdmap(c.src.container, srcIdmap)
 			if err != nil {
 				fsTransfer <- err
 				return

@@ -508,6 +508,13 @@ func (d *Daemon) init() error {
 		logger.Infof(" - unprivileged file capabilities: no")
 	}
 
+	if util.LoadModule("shiftfs") == nil {
+		d.os.Shiftfs = true
+		logger.Infof(" - shiftfs support: yes")
+	} else {
+		logger.Infof(" - shiftfs support: no")
+	}
+
 	/* Initialize the database */
 	dump, err := initializeDbObject(d)
 	if err != nil {
@@ -704,12 +711,6 @@ func (d *Daemon) init() error {
 	/* Setup the networks */
 	logger.Infof("Initializing networks")
 	err = networkStartup(d.State())
-	if err != nil {
-		return err
-	}
-
-	/* Restore simplestreams cache */
-	err = imageLoadStreamCache(d)
 	if err != nil {
 		return err
 	}
@@ -986,10 +987,6 @@ func (d *Daemon) Stop() error {
 		logger.Debugf(
 			"Not unmounting temporary filesystems (containers are still running)")
 	}
-
-	logger.Infof("Saving simplestreams cache")
-	trackError(imageSaveStreamCache(d.os))
-	logger.Infof("Saved simplestreams cache")
 
 	var err error
 	if n := len(errs); n > 0 {

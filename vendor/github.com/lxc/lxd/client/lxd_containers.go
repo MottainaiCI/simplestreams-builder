@@ -355,7 +355,7 @@ func (r *ProtocolLXD) CopyContainer(source ContainerServer, container api.Contai
 	}
 
 	// Optimization for the local copy case
-	if destInfo.URL == sourceInfo.URL && !r.IsClustered() {
+	if destInfo.URL == sourceInfo.URL && (!r.IsClustered() || container.Location == r.clusterTarget) {
 		// Project handling
 		if destInfo.Project != sourceInfo.Project {
 			if !r.HasExtension("container_copy_project") {
@@ -805,7 +805,9 @@ func (r *ProtocolLXD) ExecContainer(containerName string, exec api.ContainerExec
 				}
 
 				if fds["0"] != "" {
-					args.Stdin.Close()
+					if args.Stdin != nil {
+						args.Stdin.Close()
+					}
 
 					// Empty the stdin channel but don't block on it as
 					// stdin may be stuck in Read()

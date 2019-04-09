@@ -449,9 +449,9 @@ func containerLXCCreate(s *state.State, args db.ContainerArgs) (container, error
 	// Invalid idmap cache
 	c.idmapset = nil
 
-	// Set last_state to the map we have on disk
+	// Set last_state if not currently set
 	if c.localConfig["volatile.last_state.idmap"] == "" {
-		err = c.ConfigKeySet("volatile.last_state.idmap", jsonIdmap)
+		err = c.ConfigKeySet("volatile.last_state.idmap", "[]")
 		if err != nil {
 			c.Delete()
 			logger.Error("Failed creating container", ctxMap)
@@ -1149,9 +1149,39 @@ func (c *containerLXC) initLXC(config bool) error {
 	}
 
 	// Setup the hooks
+	err = lxcSetConfigItem(cc, "lxc.hook.version", "1")
+	if err != nil {
+		return err
+	}
+
 	err = lxcSetConfigItem(cc, "lxc.hook.pre-start", fmt.Sprintf("%s callhook %s %d start", c.state.OS.ExecPath, shared.VarPath(""), c.id))
 	if err != nil {
 		return err
+	}
+
+	diskIdmap, err := c.DiskIdmap()
+	if err != nil {
+		return err
+	}
+
+	if c.state.OS.Shiftfs && !c.IsPrivileged() && diskIdmap == nil {
+		// Host side mark mount
+		err = lxcSetConfigItem(cc, "lxc.hook.pre-start", fmt.Sprintf("/bin/mount -t shiftfs -o mark,passthrough=3 %s %s", c.RootfsPath(), c.RootfsPath()))
+		if err != nil {
+			return err
+		}
+
+		// Container side shift mount
+		err = lxcSetConfigItem(cc, "lxc.hook.pre-mount", fmt.Sprintf("/bin/mount -t shiftfs -o passthrough=3 %s %s", c.RootfsPath(), c.RootfsPath()))
+		if err != nil {
+			return err
+		}
+
+		// Host side umount of mark mount
+		err = lxcSetConfigItem(cc, "lxc.hook.start-host", fmt.Sprintf("/bin/umount -l %s", c.RootfsPath()))
+		if err != nil {
+			return err
+		}
 	}
 
 	err = lxcSetConfigItem(cc, "lxc.hook.post-stop", fmt.Sprintf("%s callhook %s %d stop", c.state.OS.ExecPath, shared.VarPath(""), c.id))
@@ -1220,7 +1250,7 @@ func (c *containerLXC) initLXC(config bool) error {
 	}
 
 	// Setup idmap
-	idmapset, err := c.IdmapSet()
+	idmapset, err := c.NextIdmap()
 	if err != nil {
 		return err
 	}
@@ -1849,7 +1879,7 @@ func (c *containerLXC) expandDevices(profiles []api.Profile) error {
 // setupUnixDevice() creates the unix device and sets up the necessary low-level
 // liblxc configuration items.
 func (c *containerLXC) setupUnixDevice(prefix string, dev types.Device, major int, minor int, path string, createMustSucceed bool, defaultMode bool) error {
-	if c.IsPrivileged() && !c.state.OS.RunningInUserNS && c.state.OS.CGroupDevicesController {
+	if c.isCurrentlyPrivileged() && !c.state.OS.RunningInUserNS && c.state.OS.CGroupDevicesController {
 		err := lxcSetConfigItem(c.c, "lxc.cgroup.devices.allow", fmt.Sprintf("c %d:%d rwm", major, minor))
 		if err != nil {
 			return err
@@ -1971,28 +2001,17 @@ func (c *containerLXC) startCommon() (string, error) {
 	}
 
 	/* Deal with idmap changes */
-	idmap, err := c.IdmapSet()
+	nextIdmap, err := c.NextIdmap()
 	if err != nil {
 		return "", errors.Wrap(err, "Set ID map")
 	}
 
-	lastIdmap, err := c.LastIdmapSet()
+	diskIdmap, err := c.DiskIdmap()
 	if err != nil {
 		return "", errors.Wrap(err, "Set last ID map")
 	}
 
-	var jsonIdmap string
-	if idmap != nil {
-		idmapBytes, err := json.Marshal(idmap.Idmap)
-		if err != nil {
-			return "", err
-		}
-		jsonIdmap = string(idmapBytes)
-	} else {
-		jsonIdmap = "[]"
-	}
-
-	if !reflect.DeepEqual(idmap, lastIdmap) {
+	if !reflect.DeepEqual(nextIdmap, diskIdmap) && !(diskIdmap == nil && c.state.OS.Shiftfs) {
 		if shared.IsTrue(c.expandedConfig["security.protection.shift"]) {
 			return "", fmt.Errorf("Container is protected against filesystem shifting")
 		}
@@ -2005,11 +2024,11 @@ func (c *containerLXC) startCommon() (string, error) {
 			return "", errors.Wrap(err, "Storage start")
 		}
 
-		if lastIdmap != nil {
+		if diskIdmap != nil {
 			if c.Storage().GetStorageType() == storageTypeZfs {
-				err = lastIdmap.UnshiftRootfs(c.RootfsPath(), zfsIdmapSetSkipper)
+				err = diskIdmap.UnshiftRootfs(c.RootfsPath(), zfsIdmapSetSkipper)
 			} else {
-				err = lastIdmap.UnshiftRootfs(c.RootfsPath(), nil)
+				err = diskIdmap.UnshiftRootfs(c.RootfsPath(), nil)
 			}
 			if err != nil {
 				if ourStart {
@@ -2019,11 +2038,11 @@ func (c *containerLXC) startCommon() (string, error) {
 			}
 		}
 
-		if idmap != nil {
+		if nextIdmap != nil && !c.state.OS.Shiftfs {
 			if c.Storage().GetStorageType() == storageTypeZfs {
-				err = idmap.ShiftRootfs(c.RootfsPath(), zfsIdmapSetSkipper)
+				err = nextIdmap.ShiftRootfs(c.RootfsPath(), zfsIdmapSetSkipper)
 			} else {
-				err = idmap.ShiftRootfs(c.RootfsPath(), nil)
+				err = nextIdmap.ShiftRootfs(c.RootfsPath(), nil)
 			}
 			if err != nil {
 				if ourStart {
@@ -2033,42 +2052,38 @@ func (c *containerLXC) startCommon() (string, error) {
 			}
 		}
 
-		var mode os.FileMode
-		var uid int64
-		var gid int64
-
-		if c.IsPrivileged() {
-			mode = 0700
-		} else {
-			mode = 0755
-			if idmap != nil {
-				uid, gid = idmap.ShiftIntoNs(0, 0)
-			}
-		}
-
-		err = os.Chmod(c.Path(), mode)
-		if err != nil {
-			return "", err
-		}
-
-		err = os.Chown(c.Path(), int(uid), int(gid))
-		if err != nil {
-			return "", err
-		}
-
-		if ourStart {
-			_, err = c.StorageStop()
+		jsonDiskIdmap := "[]"
+		if nextIdmap != nil && !c.state.OS.Shiftfs {
+			idmapBytes, err := json.Marshal(nextIdmap.Idmap)
 			if err != nil {
 				return "", err
 			}
+			jsonDiskIdmap = string(idmapBytes)
+		}
+
+		err = c.ConfigKeySet("volatile.last_state.idmap", jsonDiskIdmap)
+		if err != nil {
+			return "", errors.Wrapf(err, "Set volatile.last_state.idmap config key on container %q (id %d)", c.name, c.id)
 		}
 
 		c.updateProgress("")
 	}
 
-	err = c.ConfigKeySet("volatile.last_state.idmap", jsonIdmap)
-	if err != nil {
-		return "", errors.Wrapf(err, "Set volatile.last_state.idmap config key on container %q (id %d)", c.name, c.id)
+	var idmapBytes []byte
+	if nextIdmap == nil {
+		idmapBytes = []byte("[]")
+	} else {
+		idmapBytes, err = json.Marshal(nextIdmap.Idmap)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if c.localConfig["volatile.idmap.current"] != string(idmapBytes) {
+		err = c.ConfigKeySet("volatile.idmap.current", string(idmapBytes))
+		if err != nil {
+			return "", errors.Wrapf(err, "Set volatile.idmap.current config key on container %q (id %d)", c.name, c.id)
+		}
 	}
 
 	// Generate the Seccomp profile
@@ -2112,7 +2127,7 @@ func (c *containerLXC) startCommon() (string, error) {
 				continue
 			}
 			devPath := paths[0]
-			if c.IsPrivileged() && !c.state.OS.RunningInUserNS && c.state.OS.CGroupDevicesController {
+			if c.isCurrentlyPrivileged() && !c.state.OS.RunningInUserNS && c.state.OS.CGroupDevicesController {
 				// Add the new device cgroup rule
 				dType, dMajor, dMinor, err := deviceGetAttributes(devPath)
 				if err != nil {
@@ -2406,6 +2421,31 @@ func (c *containerLXC) startCommon() (string, error) {
 		return "", err
 	}
 
+	// Undo liblxc modifying container directory ownership
+	err = os.Chown(c.Path(), 0, 0)
+	if err != nil {
+		if ourStart {
+			c.StorageStop()
+		}
+		return "", err
+	}
+
+	// Set right permission to allow traversal
+	var mode os.FileMode
+	if c.isCurrentlyPrivileged() {
+		mode = 0700
+	} else {
+		mode = 0711
+	}
+
+	err = os.Chmod(c.Path(), mode)
+	if err != nil {
+		if ourStart {
+			c.StorageStop()
+		}
+		return "", err
+	}
+
 	// Update the backup.yaml file
 	err = writeBackupFile(c)
 	if err != nil {
@@ -2429,6 +2469,9 @@ func (c *containerLXC) startCommon() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("Error updating last used: %v", err)
 	}
+
+	// Unmount any previously mounted shiftfs
+	syscall.Unmount(c.RootfsPath(), syscall.MNT_DETACH)
 
 	return configPath, nil
 }
@@ -2880,8 +2923,14 @@ func (c *containerLXC) OnStop(target string) error {
 	// Make sure we can't call go-lxc functions by mistake
 	c.fromHook = true
 
+	// Kill all proxy devices, must happen before StorageStop
+	err := c.removeProxyDevices()
+	if err != nil {
+		return fmt.Errorf("Unable to remove proxy devices: %v", err)
+	}
+
 	// Stop the storage for this container
-	_, err := c.StorageStop()
+	_, err = c.StorageStop()
 	if err != nil {
 		if op != nil {
 			op.Done(err)
@@ -2944,12 +2993,6 @@ func (c *containerLXC) OnStop(target string) error {
 		err = c.removeNetworkFilters()
 		if err != nil {
 			logger.Error("Unable to remove network filters", log.Ctx{"container": c.Name(), "err": err})
-		}
-
-		// Clean all proxy devices
-		err = c.removeProxyDevices()
-		if err != nil {
-			logger.Error("Unable to remove proxy devices", log.Ctx{"container": c.Name(), "err": err})
 		}
 
 		// Reboot the container
@@ -5064,7 +5107,7 @@ func (c *containerLXC) Export(w io.Writer, properties map[string]string) error {
 	}
 
 	// Unshift the container
-	idmap, err := c.LastIdmapSet()
+	idmap, err := c.DiskIdmap()
 	if err != nil {
 		logger.Error("Failed exporting container", ctxMap)
 		return err
@@ -5391,12 +5434,12 @@ func (c *containerLXC) Migrate(args *CriuMigrationArgs) error {
 		 * opened by the process after it is in its user
 		 * namespace.
 		 */
-		if !c.IsPrivileged() {
-			idmapset, err := c.IdmapSet()
-			if err != nil {
-				return err
-			}
+		idmapset, err := c.CurrentIdmap()
+		if err != nil {
+			return err
+		}
 
+		if idmapset != nil {
 			ourStart, err := c.StorageStart()
 			if err != nil {
 				return err
@@ -5563,6 +5606,46 @@ func (c *containerLXC) templateApplyNow(trigger string) error {
 		return errors.Wrapf(err, "Could not parse %s", fname)
 	}
 
+	// Find rootUid and rootGid
+	idmapset, err := c.DiskIdmap()
+	if err != nil {
+		return errors.Wrap(err, "Failed to set ID map")
+	}
+
+	rootUid := int64(0)
+	rootGid := int64(0)
+
+	// Get the right uid and gid for the container
+	if idmapset != nil {
+		rootUid, rootGid = idmapset.ShiftIntoNs(0, 0)
+	}
+
+	// Figure out the container architecture
+	arch, err := osarch.ArchitectureName(c.architecture)
+	if err != nil {
+		arch, err = osarch.ArchitectureName(c.state.OS.Architectures[0])
+		if err != nil {
+			return errors.Wrap(err, "Failed to detect system architecture")
+		}
+	}
+
+	// Generate the container metadata
+	containerMeta := make(map[string]string)
+	containerMeta["name"] = c.name
+	containerMeta["architecture"] = arch
+
+	if c.ephemeral {
+		containerMeta["ephemeral"] = "true"
+	} else {
+		containerMeta["ephemeral"] = "false"
+	}
+
+	if c.IsPrivileged() {
+		containerMeta["privileged"] = "true"
+	} else {
+		containerMeta["privileged"] = "false"
+	}
+
 	// Go through the templates
 	for tplPath, tpl := range metadata.Templates {
 		var w *os.File
@@ -5593,22 +5676,8 @@ func (c *containerLXC) templateApplyNow(trigger string) error {
 				return errors.Wrap(err, "Failed to create template file")
 			}
 		} else {
-			// Create a new one
-			uid := int64(0)
-			gid := int64(0)
-
-			// Get the right uid and gid for the container
-			if !c.IsPrivileged() {
-				idmapset, err := c.IdmapSet()
-				if err != nil {
-					return errors.Wrap(err, "Failed to set ID map")
-				}
-
-				uid, gid = idmapset.ShiftIntoNs(0, 0)
-			}
-
 			// Create the directories leading to the file
-			shared.MkdirAllOwner(path.Dir(fullpath), 0755, int(uid), int(gid))
+			shared.MkdirAllOwner(path.Dir(fullpath), 0755, int(rootUid), int(rootGid))
 
 			// Create the file itself
 			w, err = os.Create(fullpath)
@@ -5617,9 +5686,7 @@ func (c *containerLXC) templateApplyNow(trigger string) error {
 			}
 
 			// Fix ownership and mode
-			if !c.IsPrivileged() {
-				w.Chown(int(uid), int(gid))
-			}
+			w.Chown(int(rootUid), int(rootGid))
 			w.Chmod(0644)
 		}
 		defer w.Close()
@@ -5636,32 +5703,6 @@ func (c *containerLXC) templateApplyNow(trigger string) error {
 		tplRender, err := tplSet.FromString("{% autoescape off %}" + string(tplString) + "{% endautoescape %}")
 		if err != nil {
 			return errors.Wrap(err, "Failed to render template")
-		}
-
-		// Figure out the architecture
-		arch, err := osarch.ArchitectureName(c.architecture)
-		if err != nil {
-			arch, err = osarch.ArchitectureName(c.state.OS.Architectures[0])
-			if err != nil {
-				return errors.Wrap(err, "Failed to detect system architecture")
-			}
-		}
-
-		// Generate the metadata
-		containerMeta := make(map[string]string)
-		containerMeta["name"] = c.name
-		containerMeta["architecture"] = arch
-
-		if c.ephemeral {
-			containerMeta["ephemeral"] = "true"
-		} else {
-			containerMeta["ephemeral"] = "false"
-		}
-
-		if c.IsPrivileged() {
-			containerMeta["privileged"] = "true"
-		} else {
-			containerMeta["privileged"] = "false"
 		}
 
 		configGet := func(confKey, confDefault *pongo2.Value) *pongo2.Value {
@@ -5842,7 +5883,7 @@ func (c *containerLXC) FilePull(srcpath string, dstpath string) (int64, int64, o
 
 	// Unmap uid and gid if needed
 	if !c.IsRunning() {
-		idmapset, err := c.LastIdmapSet()
+		idmapset, err := c.DiskIdmap()
 		if err != nil {
 			return -1, -1, 0, "", nil, err
 		}
@@ -5862,7 +5903,7 @@ func (c *containerLXC) FilePush(type_ string, srcpath string, dstpath string, ui
 
 	// Map uid and gid if needed
 	if !c.IsRunning() {
-		idmapset, err := c.LastIdmapSet()
+		idmapset, err := c.DiskIdmap()
 		if err != nil {
 			return err
 		}
@@ -6367,17 +6408,19 @@ func (c *containerLXC) tarStoreFile(linkmap map[uint64]string, offset int, tw *t
 	}
 
 	// Unshift the id under /rootfs/ for unpriv containers
-	if !c.IsPrivileged() && strings.HasPrefix(hdr.Name, "/rootfs") {
-		idmapset, err := c.IdmapSet()
+	if strings.HasPrefix(hdr.Name, "/rootfs") {
+		idmapset, err := c.DiskIdmap()
 		if err != nil {
 			return err
 		}
 
-		huid, hgid := idmapset.ShiftFromNs(int64(hdr.Uid), int64(hdr.Gid))
-		hdr.Uid = int(huid)
-		hdr.Gid = int(hgid)
-		if hdr.Uid == -1 || hdr.Gid == -1 {
-			return nil
+		if idmapset != nil {
+			huid, hgid := idmapset.ShiftFromNs(int64(hdr.Uid), int64(hdr.Gid))
+			hdr.Uid = int(huid)
+			hdr.Gid = int(hgid)
+			if hdr.Uid == -1 || hdr.Gid == -1 {
+				return nil
+			}
 		}
 	}
 
@@ -6719,7 +6762,7 @@ func (c *containerLXC) createUnixDevice(prefix string, m types.Device, defaultMo
 			return nil, fmt.Errorf("Failed to chmod device %s: %s", devPath, err)
 		}
 
-		idmapset, err := c.IdmapSet()
+		idmapset, err := c.CurrentIdmap()
 		if err != nil {
 			return nil, err
 		}
@@ -6798,7 +6841,7 @@ func (c *containerLXC) insertUnixDevice(prefix string, m types.Device, defaultMo
 		}
 	}
 
-	if c.IsPrivileged() && !c.state.OS.RunningInUserNS && c.state.OS.CGroupDevicesController {
+	if !c.isCurrentlyPrivileged() && !c.state.OS.RunningInUserNS && c.state.OS.CGroupDevicesController {
 		// Add the new device cgroup rule
 		if err := c.CGroupSet("devices.allow", fmt.Sprintf("%s %d:%d rwm", dType, dMajor, dMinor)); err != nil {
 			return fmt.Errorf("Failed to add cgroup rule for device")
@@ -6870,7 +6913,7 @@ func (c *containerLXC) removeUnixDevice(prefix string, m types.Device, eject boo
 		}
 	}
 
-	if c.IsPrivileged() && !c.state.OS.RunningInUserNS && c.state.OS.CGroupDevicesController {
+	if c.isCurrentlyPrivileged() && !c.state.OS.RunningInUserNS && c.state.OS.CGroupDevicesController {
 		// Remove the device cgroup rule
 		err = c.CGroupSet("devices.deny", fmt.Sprintf("%s %d:%d rwm", dType, dMajor, dMinor))
 		if err != nil {
@@ -6992,7 +7035,7 @@ func (c *containerLXC) addInfinibandDevicesPerPort(deviceName string, ifDev *IBF
 			return err
 		}
 
-		if c.IsPrivileged() && !c.state.OS.RunningInUserNS && c.state.OS.CGroupDevicesController {
+		if c.isCurrentlyPrivileged() && !c.state.OS.RunningInUserNS && c.state.OS.CGroupDevicesController {
 			// Add the new device cgroup rule
 			dType, dMajor, dMinor, err := deviceGetAttributes(devPath)
 			if err != nil {
@@ -7040,7 +7083,7 @@ func (c *containerLXC) addInfinibandDevicesPerFun(deviceName string, ifDev *IBF,
 			return err
 		}
 		devPath := paths[0]
-		if c.IsPrivileged() && !c.state.OS.RunningInUserNS && c.state.OS.CGroupDevicesController {
+		if c.isCurrentlyPrivileged() && !c.state.OS.RunningInUserNS && c.state.OS.CGroupDevicesController {
 			// Add the new device cgroup rule
 			dType, dMajor, dMinor, err := deviceGetAttributes(devPath)
 			if err != nil {
@@ -8636,6 +8679,19 @@ func (c *containerLXC) IsNesting() bool {
 	return shared.IsTrue(c.expandedConfig["security.nesting"])
 }
 
+func (c *containerLXC) isCurrentlyPrivileged() bool {
+	if !c.IsRunning() {
+		return c.IsPrivileged()
+	}
+
+	idmap, err := c.CurrentIdmap()
+	if err != nil {
+		return c.IsPrivileged()
+	}
+
+	return idmap == nil
+}
+
 func (c *containerLXC) IsPrivileged() bool {
 	return shared.IsTrue(c.expandedConfig["security.privileged"])
 }
@@ -8672,25 +8728,6 @@ func (c *containerLXC) Id() int {
 	return c.id
 }
 
-func (c *containerLXC) IdmapSet() (*idmap.IdmapSet, error) {
-	var err error
-
-	if c.idmapset != nil {
-		return c.idmapset, nil
-	}
-
-	if c.IsPrivileged() {
-		return nil, nil
-	}
-
-	c.idmapset, err = c.NextIdmapSet()
-	if err != nil {
-		return nil, err
-	}
-
-	return c.idmapset, nil
-}
-
 func (c *containerLXC) InitPID() int {
 	// Load the go-lxc struct
 	err := c.initLXC(false)
@@ -8709,30 +8746,31 @@ func (c *containerLXC) LocalDevices() types.Devices {
 	return c.localDevices
 }
 
-func (c *containerLXC) idmapsetFromConfig(k string) (*idmap.IdmapSet, error) {
-	lastJsonIdmap := c.LocalConfig()[k]
-
-	if lastJsonIdmap == "" {
-		return c.IdmapSet()
+func (c *containerLXC) CurrentIdmap() (*idmap.IdmapSet, error) {
+	jsonIdmap, ok := c.LocalConfig()["volatile.idmap.current"]
+	if !ok {
+		return c.DiskIdmap()
 	}
 
-	return idmapsetFromString(lastJsonIdmap)
+	return idmapsetFromString(jsonIdmap)
 }
 
-func (c *containerLXC) NextIdmapSet() (*idmap.IdmapSet, error) {
-	if c.localConfig["volatile.idmap.next"] != "" {
-		return c.idmapsetFromConfig("volatile.idmap.next")
-	} else if c.IsPrivileged() {
+func (c *containerLXC) DiskIdmap() (*idmap.IdmapSet, error) {
+	jsonIdmap, ok := c.LocalConfig()["volatile.last_state.idmap"]
+	if !ok {
 		return nil, nil
-	} else if c.state.OS.IdmapSet != nil {
-		return c.state.OS.IdmapSet, nil
 	}
 
-	return nil, fmt.Errorf("Unable to determine the idmap")
+	return idmapsetFromString(jsonIdmap)
 }
 
-func (c *containerLXC) LastIdmapSet() (*idmap.IdmapSet, error) {
-	return c.idmapsetFromConfig("volatile.last_state.idmap")
+func (c *containerLXC) NextIdmap() (*idmap.IdmapSet, error) {
+	jsonIdmap, ok := c.LocalConfig()["volatile.idmap.next"]
+	if !ok {
+		return c.CurrentIdmap()
+	}
+
+	return idmapsetFromString(jsonIdmap)
 }
 
 func (c *containerLXC) DaemonState() *state.State {
