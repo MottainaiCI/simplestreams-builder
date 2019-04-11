@@ -48,5 +48,9 @@ func MkdirIfNotExist(dir string, mode os.FileMode) (*os.FileInfo, error) {
 		}
 	}
 
-	return &info, nil
+	if info != nil {
+		return &info, nil
+	} else {
+		return nil, nil
+	}
 }
