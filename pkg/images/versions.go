@@ -47,16 +47,33 @@ type VersionsSSBuilderManifest struct {
 	Versions map[string]lxd_streams.SimpleStreamsManifestProductVersion `json:"versions"`
 }
 
+type CombinedSha256Builder struct {
+	SquashFsIsPresent      bool
+	TarXzIsPresent         bool
+	CombinedRootxzSha256   hash.Hash
+	CombinedSquashfsSha256 hash.Hash
+}
+
+func newCombinedSha256Builder() CombinedSha256Builder {
+	return CombinedSha256Builder{
+		SquashFsIsPresent:      false,
+		TarXzIsPresent:         false,
+		CombinedSquashfsSha256: sha256.New(),
+		CombinedRootxzSha256:   sha256.New(),
+	}
+}
+
 func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 	productDir, prefix string) (*VersionsSSBuilderManifest, error) {
 	var err error
 	var files []os.FileInfo
 	var productBasePath, itemDir string
-	var item *lxd_streams.SimpleStreamsManifestProductVersionItem
+	var item, lxdTarXzItem *lxd_streams.SimpleStreamsManifestProductVersionItem
 	var ans *VersionsSSBuilderManifest = &VersionsSSBuilderManifest{
 		Name:     product.Name,
 		Versions: make(map[string]lxd_streams.SimpleStreamsManifestProductVersion),
 	}
+	var combined CombinedSha256Builder
 
 	// Iterate for every sub-directories that match with regex
 	files, err = ioutil.ReadDir(productDir)
@@ -90,18 +107,31 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 		productBasePath = path.Join(prefix,
 			path.Join(product.Directory, f.Name()))
 		itemDir = path.Join(productDir, f.Name())
+		combined = newCombinedSha256Builder()
 
-		item, _ = checkItem("rootfs.squashfs", itemDir, productBasePath)
+		lxdTarXzItem, _ = checkItem("lxd.tar.xz", itemDir, productBasePath, &combined)
+		item, _ = checkItem("rootfs.squashfs", itemDir, productBasePath, &combined)
 		if item != nil {
 			version.Items["root.squashfs"] = *item
 		}
-		item, _ = checkItem("lxd.tar.xz", itemDir, productBasePath)
-		if item != nil {
-			version.Items["lxd.tar.xz"] = *item
-		}
-		item, _ = checkItem("rootfs.tar.xz", itemDir, productBasePath)
+		item, _ = checkItem("rootfs.tar.xz", itemDir, productBasePath, &combined)
 		if item != nil {
 			version.Items["root.tar.xz"] = *item
+		}
+
+		if lxdTarXzItem != nil {
+			if combined.SquashFsIsPresent {
+				(*lxdTarXzItem).LXDHashSha256SquashFs = hex.EncodeToString(
+					combined.CombinedSquashfsSha256.Sum(nil),
+				)
+			}
+
+			if combined.TarXzIsPresent {
+				sha := hex.EncodeToString(combined.CombinedRootxzSha256.Sum(nil))
+				(*lxdTarXzItem).LXDHashSha256RootXz = sha
+				(*lxdTarXzItem).LXDHashSha256 = sha
+			}
+			version.Items["lxd.tar.xz"] = *lxdTarXzItem
 		}
 
 		ans.Versions[f.Name()] = version
@@ -110,7 +140,7 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 	return ans, nil
 }
 
-func checkItem(base, dir, productBasePath string) (*lxd_streams.SimpleStreamsManifestProductVersionItem, error) {
+func checkItem(base, dir, productBasePath string, combined *CombinedSha256Builder) (*lxd_streams.SimpleStreamsManifestProductVersionItem, error) {
 	var err error
 	var ans *lxd_streams.SimpleStreamsManifestProductVersionItem
 	var filePath string = fmt.Sprintf("%s/%s", dir, base)
@@ -122,11 +152,17 @@ func checkItem(base, dir, productBasePath string) (*lxd_streams.SimpleStreamsMan
 	var pb []byte
 	var nBytes int
 
+	if combined == nil {
+		return nil, fmt.Errorf("Invalid combined struct")
+	}
+
 	if base == "rootfs.squashfs" {
 		ftype = "squashfs"
+		(*combined).SquashFsIsPresent = true
 	} else if base == "lxd.tar.xz" {
 		ftype = base
 	} else if base == "rootfs.tar.xz" {
+		(*combined).TarXzIsPresent = true
 		ftype = "root.tar.xz"
 	} else {
 		return nil, fmt.Errorf("Unexpected file " + base)
@@ -158,6 +194,14 @@ func checkItem(base, dir, productBasePath string) (*lxd_streams.SimpleStreamsMan
 			pb = buf[0:nBytes]
 			fmd5.Write(pb)
 			fsha.Write(pb)
+			if base == "lxd.tar.xz" {
+				(*combined).CombinedRootxzSha256.Write(pb)
+				(*combined).CombinedSquashfsSha256.Write(pb)
+			} else if base == "rootfs.tar.xz" {
+				(*combined).CombinedRootxzSha256.Write(pb)
+			} else if base == "rootfs.squashfs" {
+				(*combined).CombinedSquashfsSha256.Write(pb)
+			}
 		}
 
 		if err == io.EOF {
