@@ -111,7 +111,7 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 		itemDir = path.Join(productDir, f.Name())
 		combined = newCombinedSha256Builder()
 		fmt.Println(fmt.Sprintf("For product %s I use base path %s.",
-			f.Name(), productBasePath))
+			product.Name, productBasePath))
 
 		lxdTarXzItem, _ = checkItem("lxd.tar.xz", itemDir, productBasePath, &combined)
 		item, _ = checkItem("rootfs.squashfs", itemDir, productBasePath, &combined)
