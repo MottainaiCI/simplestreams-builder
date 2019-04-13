@@ -76,7 +76,7 @@ func newBuildIndexCommand(config *conf.BuilderTreeConfig) *cobra.Command {
 					utils.CheckError(err)
 				}
 
-				file, err := os.OpenFile(f, os.O_WRONLY|os.O_CREATE, 0666)
+				file, err := os.OpenFile(f, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 				if err != nil {
 					fmt.Println("Error on create index file " + err.Error())
 					os.Exit(1)
