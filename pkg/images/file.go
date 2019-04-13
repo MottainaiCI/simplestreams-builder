@@ -37,7 +37,7 @@ import (
 func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_streams.SimpleStreamsManifest, error) {
 	// NOTE: currently SimpleStreamsManifest struct doesn't contain
 	//       content_id field.
-	var ipath, prefix, ssbPath string
+	var ssbPath string
 	var ans *lxd_streams.SimpleStreamsManifest
 	var prodMap map[string]lxd_streams.SimpleStreamsManifestProduct
 	var manifest *VersionsSSBuilderManifest
@@ -52,28 +52,6 @@ func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_s
 	}
 	if len(config.Products) == 0 {
 		return nil, fmt.Errorf("No products defined")
-	}
-
-	if config.ImagesPath[0:1] == "/" {
-		ipath = config.ImagesPath[1:len(config.ImagesPath)]
-	} else {
-		ipath = config.ImagesPath
-	}
-	if ipath[len(ipath)-1:] == "/" {
-		ipath = ipath[:len(ipath)-1]
-	}
-
-	if config.Prefix[0:1] == "/" {
-		if len(config.Prefix) > 1 {
-			prefix = config.Prefix
-		} else {
-			prefix = ""
-		}
-	} else {
-		prefix = fmt.Sprintf("/%s", config.Prefix)
-	}
-	if len(prefix) > 1 && prefix[len(prefix)-1:] == "/" {
-		prefix = prefix[:len(prefix)-1]
 	}
 
 	prodMap = make(map[string]lxd_streams.SimpleStreamsManifestProduct)

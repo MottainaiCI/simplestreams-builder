@@ -52,27 +52,8 @@ func BuildIndexStruct(config *config.BuilderTreeConfig, sourceDir string) (*lxd_
 		return nil, fmt.Errorf("No products defined")
 	}
 
-	if config.ImagesPath[0:1] == "/" {
-		ipath = config.ImagesPath[1:len(config.ImagesPath)]
-	} else {
-		ipath = config.ImagesPath
-	}
-	if ipath[len(ipath)-1:] == "/" {
-		ipath = ipath[:len(ipath)-1]
-	}
-
-	if config.Prefix[0:1] == "/" {
-		if len(config.Prefix) > 1 {
-			prefix = config.Prefix
-		} else {
-			prefix = ""
-		}
-	} else {
-		prefix = fmt.Sprintf("/%s", config.Prefix)
-	}
-	if len(prefix) > 1 && prefix[len(prefix)-1:] == "/" {
-		prefix = prefix[:len(prefix)-1]
-	}
+	ipath = strings.TrimLeft(config.ImagesPath, "/")
+	prefix = strings.TrimRight(config.Prefix, "/")
 
 	products = lxd_streams.SimpleStreamsIndexStream{
 		DataType: config.DataType,

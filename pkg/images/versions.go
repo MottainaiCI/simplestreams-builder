@@ -33,6 +33,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	lxd_streams "github.com/lxc/lxd/shared/simplestreams"
@@ -104,10 +105,13 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 			Items: make(map[string]lxd_streams.SimpleStreamsManifestProductVersionItem),
 		}
 
-		productBasePath = path.Join(prefix,
+		productBasePath = path.Join(
+			strings.TrimRight(prefix, "/"),
 			path.Join(product.Directory, f.Name()))
 		itemDir = path.Join(productDir, f.Name())
 		combined = newCombinedSha256Builder()
+		fmt.Println(fmt.Sprintf("For product %s I use base path %s.",
+			f.Name(), productBasePath))
 
 		lxdTarXzItem, _ = checkItem("lxd.tar.xz", itemDir, productBasePath, &combined)
 		item, _ = checkItem("rootfs.squashfs", itemDir, productBasePath, &combined)
