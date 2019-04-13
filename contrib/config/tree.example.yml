@@ -2,9 +2,8 @@
 # Configuration script for SimpleStream Builder
 
 # Define a specific path where build simple streams files.
-# By defualt use path / for expose images.
-# prefix: '/'
-prefix: 'images'
+# By defualt use path '' for expose images.
+# prefix: 'images'
 
 # Path of the images.json
 images_path: streams/v1
@@ -26,8 +25,10 @@ products:
     release_title: "Sabayon Builder"
     directory: sbi/sabayon-builder
     # Path where retrieve images informations and files.
-    # This option is used by build-images-file
-    prefix_path: "http://my.mottainai.org/namespace/lxd-sabayon-builder"
+    # This option is used by build-images-file.
+    # If it is used the directory directly from source-dir
+    # this option is not needed.
+    #prefix_path: "http://my.mottainai.org/namespace/lxd-sabayon-builder"
 
     aliases:
       - "sabayon/builder"
