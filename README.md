@@ -138,7 +138,7 @@ that has the name in the format `YYYYMMDD_HH24:MM`.
 After that image is been built it's needed create `ssb.json` file used for create
 `images.json` file required by Simplestreams Protocol.
 [Here](https://github.com/Sabayon/sbi-tasks/blob/master/lxd/sabayon-builder/task.yaml#L18)
-and example.
+an example.
 
 ```bash
 $# simplestreams-builder build-versions-manifest --help
@@ -209,7 +209,9 @@ Global Flags:
   -t, --target-dir string   Target dir of operations.
 ```
 
-## Use Simplestreams Tree over HTTP/HTTPS
+## Use Simplestreams Tree over HTTPS
+
+Currently, LXD permits for remotes with simplestreams protocol only HTTPS.
 
 ### Add a remote with LXD
 
