@@ -165,15 +165,18 @@ func purgeOldImages(productDir string, product *config.SimpleStreamsProduct) err
 		return err
 	}
 
+	fmt.Println("Purge directory " + productDir + "...")
+
 	for _, f := range files {
 
 		if !f.IsDir() || len(f.Name()) < 8 {
 			continue
 		}
 
-		date, err = time.Parse("20060102_03:04", f.Name())
+		date, err = time.Parse("20060102_15:04", f.Name())
 		if err != nil {
-			fmt.Println("Skipping directory " + f.Name())
+			fmt.Println(fmt.Sprintf("Skipping directory %s: %s",
+				f.Name(), err.Error()))
 			continue
 		}
 
@@ -208,7 +211,6 @@ func purgeOldImages(productDir string, product *config.SimpleStreamsProduct) err
 		}
 
 		dates = dates[1:len(dates)]
-		fmt.Println(fmt.Sprintf("ORDERED LIST: %v ", dates))
 	}
 
 	return nil
