@@ -24,6 +24,7 @@ package images
 import (
 	"crypto/md5"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -236,6 +237,13 @@ func ReadVersionsManifestJsonFromUrl(url string) (*VersionsSSBuilderManifest, er
 		Proxy:           http.ProxyFromEnvironment,
 		MaxIdleConns:    5,
 		IdleConnTimeout: 30 * time.Second,
+	}
+
+	// TODO: To refactor
+	skipVerifyCert := os.Getenv("SSBUILDER_INSECURE_SKIPVERIFY")
+	if skipVerifyCert == "1" {
+		fmt.Printf("SSBUILDER_INSECURE_SKIPVERIFY catched for url %s. You know what you do.\n", url)
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
 	client := &http.Client{
