@@ -35,16 +35,18 @@ import (
 )
 
 type BuildProductOpts struct {
-	BuildLxc       bool
-	BuildLxd       bool
-	PurgeOldImages bool
+	BuildLxc        bool
+	BuildLxd        bool
+	PurgeOldImages  bool
+	BuildScriptHook string
 }
 
 func NewBuildProductOpts() *BuildProductOpts {
 	return &BuildProductOpts{
-		BuildLxc:       true,
-		BuildLxd:       true,
-		PurgeOldImages: true,
+		BuildLxc:        true,
+		BuildLxd:        true,
+		PurgeOldImages:  true,
+		BuildScriptHook: "",
 	}
 }
 
@@ -110,43 +112,114 @@ func BuildProduct(product *config.SimpleStreamsProduct, targetDir, imageFile str
 			dateDir, product.Name))
 	}
 
-	if opts.BuildLxc {
-		buildLxcCommand := exec.Command("distrobuilder",
-			"build-lxc", imageFile, dateDir,
+	if opts.BuildScriptHook != "" {
+
+		// Create rootfs directory
+		rootfsDir := path.Join(dateDir, "staging")
+		buildDirCommand := exec.Command("distrobuilder",
+			"build-dir", imageFile, rootfsDir,
 			"--cache-dir", cacheDir)
+		defer tools.RemoveDirIfNotExist(rootfsDir)
 
-		// https://blog.kowalczyk.info/article/wOYk/advanced-command-execution-in-go-with-osexec.html
-		buildLxcCommand.Stdout = os.Stdout
-		buildLxcCommand.Stderr = os.Stderr
-
-		err = buildLxcCommand.Run()
+		err = buildDirCommand.Run()
 		if err != nil {
 			return err
 		}
 
-		// Create cache dir cleanup by distrobuilder
-		_, err = tools.MkdirIfNotExist(cacheDir, 0760)
+		runHookCommand := exec.Command(opts.BuildScriptHook)
+		// Prepare env for hook
+		runHookCommand.Env = append(os.Environ(),
+			fmt.Sprintf("%s_STAGING_DIR=%s", config.SSB_ENV_PREFIX, rootfsDir),
+			fmt.Sprintf("%s_BUILD_PRODUCT=%s", config.SSB_ENV_PREFIX, product.Name))
+
+		err = runHookCommand.Run()
 		if err != nil {
 			return err
 		}
-	}
 
-	if opts.BuildLxd {
-		buildLxdCommand := exec.Command("distrobuilder",
-			"build-lxd", imageFile, dateDir,
-			"--cache-dir", cacheDir)
-
-		buildLxdCommand.Stdout = os.Stdout
-		buildLxdCommand.Stderr = os.Stderr
-
-		err = buildLxdCommand.Run()
-		if err != nil {
-			return err
+		// Create LXC package
+		if opts.BuildLxc {
+			err = packImage(imageFile, rootfsDir, dateDir, cacheDir, "pack-lxc")
+			if err != nil {
+				return err
+			}
 		}
+
+		// Create LXD package
+		if opts.BuildLxd {
+			err = packImage(imageFile, rootfsDir, dateDir, cacheDir, "pack-lxd")
+			if err != nil {
+				return err
+			}
+		}
+
+	} else {
+
+		if opts.BuildLxc {
+			buildLxcCommand := exec.Command("distrobuilder",
+				"build-lxc", imageFile, dateDir,
+				"--cache-dir", cacheDir)
+
+			// https://blog.kowalczyk.info/article/wOYk/advanced-command-execution-in-go-with-osexec.html
+			buildLxcCommand.Stdout = os.Stdout
+			buildLxcCommand.Stderr = os.Stderr
+
+			err = buildLxcCommand.Run()
+			if err != nil {
+				return err
+			}
+
+			// Create cache dir cleanup by distrobuilder
+			_, err = tools.MkdirIfNotExist(cacheDir, 0760)
+			if err != nil {
+				return err
+			}
+		}
+
+		if opts.BuildLxd {
+			buildLxdCommand := exec.Command("distrobuilder",
+				"build-lxd", imageFile, dateDir,
+				"--cache-dir", cacheDir)
+
+			buildLxdCommand.Stdout = os.Stdout
+			buildLxdCommand.Stderr = os.Stderr
+
+			err = buildLxdCommand.Run()
+			if err != nil {
+				return err
+			}
+		}
+
 	}
 
 	if opts.PurgeOldImages {
 		err = purgeOldImages(productDir, product)
+	}
+
+	return nil
+}
+
+func packImage(imageFile, rootfsDir, dateDir, cacheDir, subCommand string) error {
+	var err error
+
+	// Create cache dir cleanup by distrobuilder
+	_, err = tools.MkdirIfNotExist(cacheDir, 0760)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Executing %s command...\n", subCommand)
+
+	packCommand := exec.Command("distrobuilder",
+		subCommand, imageFile, rootfsDir, dateDir,
+		"--cache-dir", cacheDir)
+
+	packCommand.Stdout = os.Stdout
+	packCommand.Stderr = os.Stderr
+
+	err = packCommand.Run()
+	if err != nil {
+		return err
 	}
 
 	return nil

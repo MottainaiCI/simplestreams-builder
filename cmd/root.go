@@ -38,13 +38,12 @@ Copyright (c) 2019 Mottainai
 
 Mottainai - LXC/LXD Simplestreams Tree Builder`
 
-	SSB_ENV_PREFIX = `SSBUILDER`
-	SSB_VERSION    = `0.1.0`
+	SSB_VERSION = `0.1.0`
 )
 
 func initConfig(config *conf.BuilderTreeConfig) {
 	// Set env variable
-	config.Viper.SetEnvPrefix(SSB_ENV_PREFIX)
+	config.Viper.SetEnvPrefix(conf.SSB_ENV_PREFIX)
 	config.Viper.BindEnv("config")
 	config.Viper.SetDefault("config", "")
 

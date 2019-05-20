@@ -30,6 +30,7 @@ products:
     # this option is not needed.
     #prefix_path: "http://my.mottainai.org/namespace/lxd-sabayon-builder"
 
+    days: 1
     aliases:
       - "sabayon/builder"
 
@@ -39,6 +40,12 @@ products:
     release: current
     os: Sabayon
     directory: sbi/sabayon-base
+    # Currently distrobuilder doesn't implement a generator for inject
+    # files from host before enter on chroot. In additional, for
+    # oraclelinux it seems that .distrobuilder is not cleaned correctly.
+    # If it's defined a script then instead of call build-lxc and build-lxc
+    # I split creation in two steps: build-dir + script + pack-lxc|pack-lxd
+    # build_script_hook: "/myscript.sh"
     #hidden: true
     # Define number of images maintains for the product. Default is 1 day/image.
     #days: 1

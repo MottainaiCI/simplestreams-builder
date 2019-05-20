@@ -54,3 +54,17 @@ func MkdirIfNotExist(dir string, mode os.FileMode) (*os.FileInfo, error) {
 		return nil, nil
 	}
 }
+
+func RemoveDirIfNotExist(dir string) error {
+	var err error
+
+	if dir == "" {
+		return fmt.Errorf("Invalid directory")
+	}
+
+	if _, err = os.Stat(dir); os.IsNotExist(err) {
+		return nil
+	}
+
+	return os.RemoveAll(dir)
+}

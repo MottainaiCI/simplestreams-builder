@@ -27,6 +27,10 @@ import (
 	v "github.com/spf13/viper"
 )
 
+const (
+	SSB_ENV_PREFIX = `SSBUILDER`
+)
+
 type SimpleStreamsProduct struct {
 	Name            string   `mapstructure:"name"`
 	Architecture    string   `mapstructure:"arch"`
@@ -36,6 +40,7 @@ type SimpleStreamsProduct struct {
 	Directory       string   `mapstructure:"directory"`
 	Version         string   `mapstructure:"version"`
 	PrefixPath      string   `mapstructure:"prefix_path"`
+	BuildScriptHook string   `mapstructure:"build_script_hook"`
 	Aliases         []string `mapstructure:"aliases"`
 	Hidden          bool     `mapstructure:"hidden"`
 	Days            int      `mapstructure:"days"`
@@ -126,11 +131,12 @@ func (p *SimpleStreamsProduct) String() string {
 	prefix_path: %s
 	hidden: %v
 	days: %d
+	build_script_hook: %s
 	aliases: %s`,
 		p.Name, p.Architecture, p.Release,
 		p.ReleaseTitle, p.OperatingSystem,
 		p.Directory, p.Version, p.PrefixPath,
-		p.Hidden, p.Days, p.Aliases)
+		p.Hidden, p.Days, p.BuildScriptHook, p.Aliases)
 
 	return ans
 }
