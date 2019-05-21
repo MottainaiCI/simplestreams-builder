@@ -112,7 +112,13 @@ func BuildProduct(product *config.SimpleStreamsProduct, targetDir, imageFile str
 			dateDir, product.Name))
 	}
 
-	if opts.BuildScriptHook != "" {
+	if product.BuildScriptHook != "" || opts.BuildScriptHook != "" {
+
+		hookScript := product.BuildScriptHook
+		if opts.BuildScriptHook != "" {
+			// Override hookScript
+			hookScript = opts.BuildScriptHook
+		}
 
 		// Create rootfs directory
 		rootfsDir := path.Join(dateDir, "staging")
@@ -126,7 +132,7 @@ func BuildProduct(product *config.SimpleStreamsProduct, targetDir, imageFile str
 			return err
 		}
 
-		runHookCommand := exec.Command(opts.BuildScriptHook)
+		runHookCommand := exec.Command(hookScript)
 		// Prepare env for hook
 		runHookCommand.Env = append(os.Environ(),
 			fmt.Sprintf("%s_STAGING_DIR=%s", config.SSB_ENV_PREFIX, rootfsDir),
