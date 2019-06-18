@@ -77,7 +77,7 @@ func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_s
 				strings.TrimRight(v.Directory, "/"),
 			)
 			// Fetch and parse remote ssb.json file
-			manifest, err = ReadVersionsManifestJsonFromUrl(ssbPath)
+			manifest, err = ReadVersionsManifestJsonFromUrl(ssbPath, config.Viper.GetString("apikey"))
 
 		} else {
 			// POST: Try to search ssb.json file under local filesystem.

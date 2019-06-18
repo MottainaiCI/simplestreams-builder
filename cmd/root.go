@@ -57,9 +57,11 @@ func initCommand(rootCmd *cobra.Command, config *conf.BuilderTreeConfig) {
 
 	pflags.StringP("config", "c", "", "SimpleStreams Builder configuration file")
 	pflags.StringP("target-dir", "t", "", "Target dir of operations.")
+	pflags.StringP("apikey", "k", "", "Mottainai API Key")
 
 	config.Viper.BindPFlag("config", pflags.Lookup("config"))
 	config.Viper.BindPFlag("target-dir", pflags.Lookup("target-dir"))
+	config.Viper.BindPFlag("apikey", pflags.Lookup("apikey"))
 
 	rootCmd.AddCommand(
 		newPrintCommand(config),

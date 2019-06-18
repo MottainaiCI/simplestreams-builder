@@ -40,6 +40,7 @@ Available Commands:
   print                   Show configuration params
 
 Flags:
+  -k, --apikey string       Mottainai API Key
   -c, --config string       SimpleStreams Builder configuration file
   -h, --help                help for this command
   -t, --target-dir string   Target dir of operations.

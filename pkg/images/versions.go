@@ -229,8 +229,9 @@ func WriteVersionsManifestJson(manifest *VersionsSSBuilderManifest, out io.Write
 	return enc.Encode(manifest)
 }
 
-func ReadVersionsManifestJsonFromUrl(url string) (*VersionsSSBuilderManifest, error) {
+func ReadVersionsManifestJsonFromUrl(url, apiKey string) (*VersionsSSBuilderManifest, error) {
 	var ans *VersionsSSBuilderManifest = nil
+	var req *http.Request = nil
 	var err error
 
 	transport := &http.Transport{
@@ -251,7 +252,16 @@ func ReadVersionsManifestJsonFromUrl(url string) (*VersionsSSBuilderManifest, er
 		Timeout:   60 * time.Second,
 	}
 
-	resp, err := client.Get(url)
+	req, err = http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if apiKey != "" {
+		req.Header.Add("Authorization", "token "+apiKey)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
