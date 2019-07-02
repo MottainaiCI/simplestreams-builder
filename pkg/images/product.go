@@ -141,8 +141,13 @@ func BuildProduct(product *config.SimpleStreamsProduct, targetDir, imageFile str
 			fmt.Sprintf("%s_STAGING_DIR=%s", config.SSB_ENV_PREFIX, rootfsDir),
 			fmt.Sprintf("%s_BUILD_PRODUCT=%s", config.SSB_ENV_PREFIX, product.Name))
 
+		runHookCommand.Stdout = os.Stdout
+		runHookCommand.Stderr = os.Stderr
+
 		err = runHookCommand.Run()
 		if err != nil {
+			fmt.Println(fmt.Sprintf("Error on execute hook %s: %s",
+				hookScript, err.Error()))
 			return err
 		}
 
