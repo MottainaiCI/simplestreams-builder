@@ -127,6 +127,9 @@ func BuildProduct(product *config.SimpleStreamsProduct, targetDir, imageFile str
 			"--cache-dir", cacheDir)
 		defer tools.RemoveDirIfNotExist(rootfsDir)
 
+		buildDirCommand.Stdout = os.Stdout
+		buildDirCommand.Stderr = os.Stderr
+
 		err = buildDirCommand.Run()
 		if err != nil {
 			return err
