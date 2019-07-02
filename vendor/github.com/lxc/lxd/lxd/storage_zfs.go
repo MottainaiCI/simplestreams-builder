@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 
 	"github.com/lxc/lxd/lxd/migration"
 	"github.com/lxc/lxd/lxd/state"
@@ -1081,7 +1081,7 @@ func (s *storageZfs) copyWithoutSnapshotFull(target container, source container)
 	if sourceIsSnapshot {
 		sourceParentName, sourceSnapOnlyName, _ := containerGetParentAndSnapshotName(source.Name())
 		snapshotSuffix = fmt.Sprintf("snapshot-%s", sourceSnapOnlyName)
-		sourceDataset = fmt.Sprintf("%s/containers/%s@%s", poolName, sourceParentName, snapshotSuffix)
+		sourceDataset = fmt.Sprintf("%s/containers/%s@%s", poolName, projectPrefix(source.Project(), sourceParentName), snapshotSuffix)
 		targetSnapshotDataset = fmt.Sprintf("%s/containers/%s@snapshot-%s", poolName, projectPrefix(target.Project(), targetName), sourceSnapOnlyName)
 	} else {
 		snapshotSuffix = uuid.NewRandom().String()
@@ -1131,7 +1131,7 @@ func (s *storageZfs) copyWithoutSnapshotFull(target container, source container)
 	}
 
 	targetContainerMountPoint := getContainerMountPoint(target.Project(), s.pool.Name, targetName)
-	targetfs := fmt.Sprintf("containers/%s", targetName)
+	targetfs := fmt.Sprintf("containers/%s", projectPrefix(target.Project(), targetName))
 
 	err = zfsPoolVolumeSet(poolName, targetfs, "canmount", "noauto")
 	if err != nil {
@@ -1444,8 +1444,8 @@ func (s *storageZfs) ContainerRename(container container, newName string) error 
 	}
 
 	// Rename the dataset.
-	oldZfsDataset := fmt.Sprintf("containers/%s", oldName)
-	newZfsDataset := fmt.Sprintf("containers/%s", newName)
+	oldZfsDataset := fmt.Sprintf("containers/%s", projectPrefix(container.Project(), oldName))
+	newZfsDataset := fmt.Sprintf("containers/%s", projectPrefix(container.Project(), newName))
 	err = zfsPoolVolumeRename(poolName, oldZfsDataset, newZfsDataset, false)
 	if err != nil {
 		return err
@@ -1557,7 +1557,7 @@ func (s *storageZfs) ContainerRestore(target container, source container) error 
 	cName, snapOnlyName, _ := containerGetParentAndSnapshotName(source.Name())
 	snapName := fmt.Sprintf("snapshot-%s", snapOnlyName)
 
-	err = zfsPoolVolumeSnapshotRestore(s.getOnDiskPoolName(), fmt.Sprintf("containers/%s", cName), snapName)
+	err = zfsPoolVolumeSnapshotRestore(s.getOnDiskPoolName(), fmt.Sprintf("containers/%s", projectPrefix(source.Project(), cName)), snapName)
 	if err != nil {
 		return err
 	}
@@ -1569,7 +1569,7 @@ func (s *storageZfs) ContainerRestore(target container, source container) error 
 func (s *storageZfs) ContainerGetUsage(container container) (int64, error) {
 	var err error
 
-	fs := fmt.Sprintf("containers/%s", container.Name())
+	fs := fmt.Sprintf("containers/%s", projectPrefix(container.Project(), container.Name()))
 
 	property := "used"
 
@@ -1587,8 +1587,8 @@ func (s *storageZfs) ContainerGetUsage(container container) (int64, error) {
 	// Shortcut for refquota
 	mountpoint := getContainerMountPoint(container.Project(), s.pool.Name, container.Name())
 	if property == "referenced" && shared.IsMountPoint(mountpoint) {
-		var stat syscall.Statfs_t
-		err := syscall.Statfs(mountpoint, &stat)
+		var stat unix.Statfs_t
+		err := unix.Statfs(mountpoint, &stat)
 		if err != nil {
 			return -1, err
 		}
@@ -1873,10 +1873,10 @@ func (s *storageZfs) doContainerOnlyBackup(tmpPath string, backup backup, source
 	if sourceIsSnapshot {
 		sourceParentName, sourceSnapOnlyName, _ := containerGetParentAndSnapshotName(source.Name())
 		snapshotSuffix = fmt.Sprintf("backup-%s", sourceSnapOnlyName)
-		sourceDataset = fmt.Sprintf("%s/containers/%s@%s", poolName, sourceParentName, snapshotSuffix)
+		sourceDataset = fmt.Sprintf("%s/containers/%s@%s", poolName, projectPrefix(source.Project(), sourceParentName), snapshotSuffix)
 	} else {
 		snapshotSuffix = uuid.NewRandom().String()
-		sourceDataset = fmt.Sprintf("%s/containers/%s@%s", poolName, sourceName, snapshotSuffix)
+		sourceDataset = fmt.Sprintf("%s/containers/%s@%s", poolName, projectPrefix(source.Project(), sourceName), snapshotSuffix)
 
 		fs := fmt.Sprintf("containers/%s", projectPrefix(source.Project(), sourceName))
 		err := zfsPoolVolumeSnapshotCreate(poolName, fs, snapshotSuffix)
@@ -1922,11 +1922,11 @@ func (s *storageZfs) doSnapshotBackup(tmpPath string, backup backup, source cont
 
 	poolName := s.getOnDiskPoolName()
 	sourceParentName, sourceSnapOnlyName, _ := containerGetParentAndSnapshotName(sourceName)
-	currentSnapshotDataset := fmt.Sprintf("%s/containers/%s@snapshot-%s", poolName, sourceParentName, sourceSnapOnlyName)
+	currentSnapshotDataset := fmt.Sprintf("%s/containers/%s@snapshot-%s", poolName, projectPrefix(source.Project(), sourceParentName), sourceSnapOnlyName)
 	args := []string{"send", currentSnapshotDataset}
 	if parentSnapshot != "" {
 		parentName, parentSnaponlyName, _ := containerGetParentAndSnapshotName(parentSnapshot)
-		parentSnapshotDataset := fmt.Sprintf("%s/containers/%s@snapshot-%s", poolName, parentName, parentSnaponlyName)
+		parentSnapshotDataset := fmt.Sprintf("%s/containers/%s@snapshot-%s", poolName, projectPrefix(source.Project(), parentName), parentSnaponlyName)
 		args = append(args, "-i", parentSnapshotDataset)
 	}
 
@@ -2002,7 +2002,7 @@ func (s *storageZfs) doContainerBackupCreateOptimized(tmpPath string, backup bac
 			return err
 		}
 
-		zfsPoolVolumeSnapshotDestroy(poolName, fmt.Sprintf("containers/%s", source.Name()), tmpSnapshotName)
+		zfsPoolVolumeSnapshotDestroy(poolName, fmt.Sprintf("containers/%s", projectPrefix(source.Project(), source.Name())), tmpSnapshotName)
 	}
 	if err != nil {
 		return err
@@ -2155,7 +2155,7 @@ func (s *storageZfs) ContainerBackupCreate(backup backup, source container) erro
 
 func (s *storageZfs) doContainerBackupLoadOptimized(info backupInfo, data io.ReadSeeker, tarArgs []string) error {
 	containerName, _, _ := containerGetParentAndSnapshotName(info.Name)
-	containerMntPoint := getContainerMountPoint("default", s.pool.Name, containerName)
+	containerMntPoint := getContainerMountPoint(info.Project, s.pool.Name, containerName)
 	err := createContainerMountpoint(containerMntPoint, containerPath(info.Name, false), info.Privileged)
 	if err != nil {
 		return err
@@ -2201,7 +2201,7 @@ func (s *storageZfs) doContainerBackupLoadOptimized(info backupInfo, data io.Rea
 			return err
 		}
 
-		snapshotDataset := fmt.Sprintf("%s/containers/%s@snapshot-%s", poolName, containerName, snapshotOnlyName)
+		snapshotDataset := fmt.Sprintf("%s/containers/%s@snapshot-%s", poolName, projectPrefix(info.Project, containerName), snapshotOnlyName)
 		zfsRecvCmd := exec.Command("zfs", "receive", "-F", snapshotDataset)
 		zfsRecvCmd.Stdin = feeder
 		err = zfsRecvCmd.Run()
@@ -2233,18 +2233,18 @@ func (s *storageZfs) doContainerBackupLoadOptimized(info backupInfo, data io.Rea
 	}
 	defer feeder.Close()
 
-	containerSnapshotDataset := fmt.Sprintf("%s/containers/%s@backup", poolName, containerName)
+	containerSnapshotDataset := fmt.Sprintf("%s/containers/%s@backup", poolName, projectPrefix(info.Project, containerName))
 	zfsRecvCmd := exec.Command("zfs", "receive", "-F", containerSnapshotDataset)
 	zfsRecvCmd.Stdin = feeder
 
 	err = zfsRecvCmd.Run()
 	os.RemoveAll(unpackPath)
-	zfsPoolVolumeSnapshotDestroy(poolName, fmt.Sprintf("containers/%s", containerName), "backup")
+	zfsPoolVolumeSnapshotDestroy(poolName, fmt.Sprintf("containers/%s", projectPrefix(info.Project, containerName)), "backup")
 	if err != nil {
 		return err
 	}
 
-	fs := fmt.Sprintf("containers/%s", containerName)
+	fs := fmt.Sprintf("containers/%s", projectPrefix(info.Project, containerName))
 	err = zfsPoolVolumeSet(poolName, fs, "canmount", "noauto")
 	if err != nil {
 		return err
@@ -3361,7 +3361,7 @@ func (s *storageZfs) StoragePoolVolumeCopy(source *api.StorageVolumeSource) erro
 	return nil
 }
 
-func (s *zfsMigrationSourceDriver) SendStorageVolume(conn *websocket.Conn, op *operation, bwlimit string, storage storage) error {
+func (s *zfsMigrationSourceDriver) SendStorageVolume(conn *websocket.Conn, op *operation, bwlimit string, storage storage, volumeOnly bool) error {
 	msg := fmt.Sprintf("Function not implemented")
 	logger.Errorf(msg)
 	return fmt.Errorf(msg)

@@ -725,3 +725,43 @@ changed but the kernel map is (e.g. shiftfs).
 
 ## event\_location
 Expose the location of the generation of API events.
+
+## storage\_api\_remote\_volume\_snapshots
+This allows migrating storage volumes including their snapshots.
+
+## network\_nat\_address
+This introduces the `ipv4.nat.address` and `ipv6.nat.address` configuration keys for LXD bridges.
+Those keys control the source address used for outbound traffic from the bridge.
+
+## container\_nic\_routes
+This introduces the `ipv4.routes` and `ipv6.routes` properties on "nic" type devices.
+This allows adding static routes on host to container's nic.
+
+## rbac
+Adds support for RBAC (role based access control). This introduces new config keys:
+
+  * rbac.api.url
+  * rbac.api.key
+  * rbac.api.expiry
+  * rbac.agent.url
+  * rbac.agent.username
+  * rbac.agent.private\_key
+  * rbac.agent.public\_key
+
+## cluster\_internal\_copy
+This makes it possible to do a normal "POST /1.0/containers" to copy a
+container between cluster nodes with LXD internally detecting whether a
+migration is required.
+
+## seccomp\_notify
+If the kernel supports seccomp-based syscall interception LXD can be notified
+by a container that a registered syscall has been performed. LXD can then
+decide to trigger various actions.
+
+## lxc\_features
+This introduces the `lxc_features` section output from the `lxc info` command
+via the `GET /1.0/` route. It outputs the result of checks for key features being present in the
+underlying LXC library.
+
+## container\_nic\_ipvlan
+This introduces the `ipvlan` "nic" device type.

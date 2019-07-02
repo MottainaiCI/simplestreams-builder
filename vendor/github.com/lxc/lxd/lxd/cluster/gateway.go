@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/CanonicalLtd/go-dqlite"
@@ -97,9 +98,18 @@ type Gateway struct {
 	// their version.
 	upgradeCh chan struct{}
 
+	// Used to track whether we already triggered an upgrade because we
+	// detected a peer with an higher version.
+	upgradeTriggered bool
+
 	// ServerStore wrapper.
 	store *dqliteServerStore
+
+	lock sync.RWMutex
 }
+
+// Current dqlite protocol version.
+const dqliteVersion = 0
 
 // HandlerFuncs returns the HTTP handlers that should be added to the REST API
 // endpoint in order to handle database-related requests.
@@ -112,8 +122,34 @@ type Gateway struct {
 // database node part of the dqlite cluster.
 func (g *Gateway) HandlerFuncs() map[string]http.HandlerFunc {
 	database := func(w http.ResponseWriter, r *http.Request) {
+		g.lock.RLock()
+		defer g.lock.RUnlock()
+
 		if !tlsCheckCert(r, g.cert) {
 			http.Error(w, "403 invalid client certificate", http.StatusForbidden)
+			return
+		}
+
+		// Compare the dqlite version of the connecting client
+		// with our own one.
+		versionHeader := r.Header.Get("X-Dqlite-Version")
+		if versionHeader == "" {
+			// No version header means an old pre dqlite 1.0 client.
+			versionHeader = "0"
+		}
+		version, err := strconv.Atoi(versionHeader)
+		if err != nil {
+			http.Error(w, "400 invalid dqlite version", http.StatusBadRequest)
+			return
+		}
+		if version != dqliteVersion {
+			if !g.upgradeTriggered && version > dqliteVersion {
+				err = triggerUpdate()
+				if err == nil {
+					g.upgradeTriggered = true
+				}
+			}
+			http.Error(w, "503 dqlite version mismatch", http.StatusServiceUnavailable)
 			return
 		}
 
@@ -202,6 +238,9 @@ func (g *Gateway) HandlerFuncs() map[string]http.HandlerFunc {
 		g.acceptCh <- conn
 	}
 	raft := func(w http.ResponseWriter, r *http.Request) {
+		g.lock.RLock()
+		defer g.lock.RUnlock()
+
 		// If we are not part of the raft cluster, reply with a
 		// redirect to one of the raft nodes that we know about.
 		if g.raft == nil {
@@ -245,6 +284,9 @@ func (g *Gateway) HandlerFuncs() map[string]http.HandlerFunc {
 
 // Snapshot can be used to manually trigger a RAFT snapshot
 func (g *Gateway) Snapshot() error {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
 	return g.raft.Snapshot()
 }
 
@@ -257,6 +299,9 @@ func (g *Gateway) WaitUpgradeNotification() {
 
 // IsDatabaseNode returns true if this gateway also run acts a raft database node.
 func (g *Gateway) IsDatabaseNode() bool {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
 	return g.raft != nil
 }
 
@@ -264,12 +309,15 @@ func (g *Gateway) IsDatabaseNode() bool {
 // dqlite nodes.
 func (g *Gateway) DialFunc() dqlite.DialFunc {
 	return func(ctx context.Context, address string) (net.Conn, error) {
+		g.lock.RLock()
+		defer g.lock.RUnlock()
+
 		// Memory connection.
 		if g.memoryDial != nil {
 			return g.memoryDial(ctx, address)
 		}
 
-		return dqliteNetworkDial(ctx, address, g.cert)
+		return dqliteNetworkDial(ctx, address, g)
 	}
 }
 
@@ -301,12 +349,15 @@ func (g *Gateway) Kill() {
 func (g *Gateway) Shutdown() error {
 	logger.Debugf("Stop database gateway")
 
+	g.lock.RLock()
 	if g.raft != nil {
 		err := g.raft.Shutdown()
 		if err != nil {
+			g.lock.RUnlock()
 			return errors.Wrap(err, "Failed to shutdown raft")
 		}
 	}
+	g.lock.RUnlock()
 
 	if g.server != nil {
 		g.Sync()
@@ -314,7 +365,9 @@ func (g *Gateway) Shutdown() error {
 
 		// Unset the memory dial, since Shutdown() is also called for
 		// switching between in-memory and network mode.
+		g.lock.Lock()
 		g.memoryDial = nil
+		g.lock.Unlock()
 	}
 
 	return nil
@@ -325,6 +378,9 @@ func (g *Gateway) Shutdown() error {
 // it can inspect the database in order to decide whether to activate the
 // daemon or not.
 func (g *Gateway) Sync() {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
 	if g.server == nil {
 		return
 	}
@@ -362,6 +418,9 @@ func (g *Gateway) Reset(cert *shared.CertInfo) error {
 
 // LeaderAddress returns the address of the current raft leader.
 func (g *Gateway) LeaderAddress() (string, error) {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
 	// If we aren't clustered, return an error.
 	if g.memoryDial != nil {
 		return "", fmt.Errorf("Node is not clustered")
@@ -381,7 +440,6 @@ func (g *Gateway) LeaderAddress() (string, error) {
 			time.Sleep(time.Second)
 		}
 		return "", ctx.Err()
-
 	}
 
 	// If this isn't a raft node, contact a raft node and ask for the
@@ -483,15 +541,21 @@ func (g *Gateway) init() error {
 			return errors.Wrap(err, "Failed to create dqlite server")
 		}
 
+		g.lock.Lock()
 		g.server = server
 		g.raft = raft
+		g.lock.Unlock()
 	} else {
+		g.lock.Lock()
 		g.server = nil
 		g.raft = nil
 		g.store.inMemory = nil
+		g.lock.Unlock()
 	}
 
+	g.lock.Lock()
 	g.store.onDisk = dqlite.NewServerStore(g.db.DB(), "main", "raft_nodes", "address")
+	g.lock.Unlock()
 
 	return nil
 }
@@ -502,9 +566,13 @@ func (g *Gateway) waitLeadership() error {
 	n := 80
 	sleep := 250 * time.Millisecond
 	for i := 0; i < n; i++ {
+		g.lock.RLock()
 		if g.raft.raft.State() == raft.Leader {
+			g.lock.RUnlock()
 			return nil
 		}
+		g.lock.RUnlock()
+
 		time.Sleep(sleep)
 	}
 	return fmt.Errorf("RAFT node did not self-elect within %s", time.Duration(n)*sleep)
@@ -514,6 +582,9 @@ func (g *Gateway) waitLeadership() error {
 // cluster, as configured in the raft log. It returns an error if this node is
 // not the leader.
 func (g *Gateway) currentRaftNodes() ([]db.RaftNode, error) {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+
 	if g.raft == nil {
 		return nil, raft.ErrNotLeader
 	}
@@ -562,8 +633,8 @@ func (g *Gateway) cachedRaftNodes() ([]string, error) {
 	return addresses, nil
 }
 
-func dqliteNetworkDial(ctx context.Context, addr string, cert *shared.CertInfo) (net.Conn, error) {
-	config, err := tlsClientConfig(cert)
+func dqliteNetworkDial(ctx context.Context, addr string, g *Gateway) (net.Conn, error) {
+	config, err := tlsClientConfig(g.cert)
 	if err != nil {
 		return nil, err
 	}
@@ -579,6 +650,20 @@ func dqliteNetworkDial(ctx context.Context, addr string, cert *shared.CertInfo) 
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, err
+	}
+
+	// If the remote server has detected that we are out of date, let's
+	// trigger an upgrade.
+	if response.StatusCode == http.StatusUpgradeRequired {
+		g.lock.Lock()
+		defer g.lock.Unlock()
+		if !g.upgradeTriggered {
+			err = triggerUpdate()
+			if err == nil {
+				g.upgradeTriggered = true
+			}
+		}
+		return nil, fmt.Errorf("Upgrade needed")
 	}
 
 	// If the endpoint does not exists, it means that the target node is

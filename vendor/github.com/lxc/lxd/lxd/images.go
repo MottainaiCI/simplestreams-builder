@@ -42,52 +42,55 @@ import (
 	log "github.com/lxc/lxd/shared/log15"
 )
 
-var imagesCmd = Command{
-	name:         "images",
-	post:         imagesPost,
-	untrustedGet: true,
-	get:          imagesGet,
+var imagesCmd = APIEndpoint{
+	Name: "images",
+
+	Get:  APIEndpointAction{Handler: imagesGet, AllowUntrusted: true},
+	Post: APIEndpointAction{Handler: imagesPost, AccessHandler: AllowProjectPermission("images", "manage-images")},
 }
 
-var imageCmd = Command{
-	name:         "images/{fingerprint}",
-	untrustedGet: true,
-	get:          imageGet,
-	put:          imagePut,
-	delete:       imageDelete,
-	patch:        imagePatch,
+var imageCmd = APIEndpoint{
+	Name: "images/{fingerprint}",
+
+	Delete: APIEndpointAction{Handler: imageDelete, AccessHandler: AllowProjectPermission("images", "manage-images")},
+	Get:    APIEndpointAction{Handler: imageGet, AllowUntrusted: true},
+	Patch:  APIEndpointAction{Handler: imagePatch, AccessHandler: AllowProjectPermission("images", "manage-images")},
+	Put:    APIEndpointAction{Handler: imagePut, AccessHandler: AllowProjectPermission("images", "manage-images")},
 }
 
-var imageExportCmd = Command{
-	name:         "images/{fingerprint}/export",
-	untrustedGet: true,
-	get:          imageExport,
+var imageExportCmd = APIEndpoint{
+	Name: "images/{fingerprint}/export",
+
+	Get: APIEndpointAction{Handler: imageExport, AllowUntrusted: true},
 }
 
-var imageSecretCmd = Command{
-	name: "images/{fingerprint}/secret",
-	post: imageSecret,
+var imageSecretCmd = APIEndpoint{
+	Name: "images/{fingerprint}/secret",
+
+	Post: APIEndpointAction{Handler: imageSecret, AccessHandler: AllowProjectPermission("images", "view")},
 }
 
-var imageRefreshCmd = Command{
-	name: "images/{fingerprint}/refresh",
-	post: imageRefresh,
+var imageRefreshCmd = APIEndpoint{
+	Name: "images/{fingerprint}/refresh",
+
+	Post: APIEndpointAction{Handler: imageRefresh, AccessHandler: AllowProjectPermission("images", "manage-images")},
 }
 
-var aliasesCmd = Command{
-	name: "images/aliases",
-	post: aliasesPost,
-	get:  aliasesGet,
+var imageAliasesCmd = APIEndpoint{
+	Name: "images/aliases",
+
+	Get:  APIEndpointAction{Handler: imageAliasesGet, AccessHandler: AllowProjectPermission("images", "view")},
+	Post: APIEndpointAction{Handler: imageAliasesPost, AccessHandler: AllowProjectPermission("images", "manage-images")},
 }
 
-var aliasCmd = Command{
-	name:         "images/aliases/{name:.*}",
-	untrustedGet: true,
-	get:          aliasGet,
-	delete:       aliasDelete,
-	put:          aliasPut,
-	post:         aliasPost,
-	patch:        aliasPatch,
+var imageAliasCmd = APIEndpoint{
+	Name: "images/aliases/{name:.*}",
+
+	Delete: APIEndpointAction{Handler: imageAliasDelete, AccessHandler: AllowProjectPermission("images", "manage-images")},
+	Get:    APIEndpointAction{Handler: imageAliasGet, AllowUntrusted: true},
+	Patch:  APIEndpointAction{Handler: imageAliasPatch, AccessHandler: AllowProjectPermission("images", "manage-images")},
+	Post:   APIEndpointAction{Handler: imageAliasPost, AccessHandler: AllowProjectPermission("images", "manage-images")},
+	Put:    APIEndpointAction{Handler: imageAliasPut, AccessHandler: AllowProjectPermission("images", "manage-images")},
 }
 
 /* We only want a single publish running at any one time.
@@ -271,7 +274,7 @@ func imgPostContInfo(d *Daemon, r *http.Request, req api.ImagesPost, op *operati
 		return nil, err
 	}
 	if compressErr != nil {
-		return nil, err
+		return nil, compressErr
 	}
 	imageFile.Close()
 
@@ -327,7 +330,7 @@ func imgPostRemoteInfo(d *Daemon, req api.ImagesPost, op *operation, project str
 		return nil, err
 	}
 
-	id, info, err := d.cluster.ImageGet("default", info.Fingerprint, false, true)
+	id, info, err := d.cluster.ImageGet(project, info.Fingerprint, false, true)
 	if err != nil {
 		return nil, err
 	}
@@ -788,7 +791,7 @@ func imagesPost(d *Daemon, r *http.Request) Response {
 		}
 
 		// Sync the images between each node in the cluster on demand
-		err = imageSyncBetweenNodes(d, info.Fingerprint)
+		err = imageSyncBetweenNodes(d, project, info.Fingerprint)
 		if err != nil {
 			return errors.Wrapf(err, "Image sync between nodes")
 		}
@@ -881,7 +884,7 @@ func doImagesGet(d *Daemon, recursion bool, project string, public bool) (interf
 
 func imagesGet(d *Daemon, r *http.Request) Response {
 	project := projectParam(r)
-	public := d.checkTrustedClient(r) != nil
+	public := d.checkTrustedClient(r) != nil || AllowProjectPermission("images", "view")(d, r) != EmptySyncResponse
 
 	result, err := doImagesGet(d, util.IsRecursionRequest(r), project, public)
 	if err != nil {
@@ -1484,7 +1487,7 @@ func imageValidSecret(fingerprint string, secret string) bool {
 func imageGet(d *Daemon, r *http.Request) Response {
 	project := projectParam(r)
 	fingerprint := mux.Vars(r)["fingerprint"]
-	public := d.checkTrustedClient(r) != nil
+	public := d.checkTrustedClient(r) != nil || AllowProjectPermission("images", "view")(d, r) != EmptySyncResponse
 	secret := r.FormValue("secret")
 
 	info, response := doImageGet(d.cluster, project, fingerprint, false)
@@ -1596,7 +1599,7 @@ func imagePatch(d *Daemon, r *http.Request) Response {
 	return EmptySyncResponse
 }
 
-func aliasesPost(d *Daemon, r *http.Request) Response {
+func imageAliasesPost(d *Daemon, r *http.Request) Response {
 	project := projectParam(r)
 	req := api.ImageAliasesPost{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1630,7 +1633,7 @@ func aliasesPost(d *Daemon, r *http.Request) Response {
 	return SyncResponseLocation(true, nil, fmt.Sprintf("/%s/images/aliases/%s", version.APIVersion, req.Name))
 }
 
-func aliasesGet(d *Daemon, r *http.Request) Response {
+func imageAliasesGet(d *Daemon, r *http.Request) Response {
 	project := projectParam(r)
 	recursion := util.IsRecursionRequest(r)
 
@@ -1646,7 +1649,7 @@ func aliasesGet(d *Daemon, r *http.Request) Response {
 			responseStr = append(responseStr, url)
 
 		} else {
-			_, alias, err := d.cluster.ImageAliasGet(project, name, d.checkTrustedClient(r) == nil)
+			_, alias, err := d.cluster.ImageAliasGet(project, name, true)
 			if err != nil {
 				continue
 			}
@@ -1661,11 +1664,12 @@ func aliasesGet(d *Daemon, r *http.Request) Response {
 	return SyncResponse(true, responseMap)
 }
 
-func aliasGet(d *Daemon, r *http.Request) Response {
+func imageAliasGet(d *Daemon, r *http.Request) Response {
 	project := projectParam(r)
 	name := mux.Vars(r)["name"]
+	public := d.checkTrustedClient(r) != nil || AllowProjectPermission("images", "view")(d, r) != EmptySyncResponse
 
-	_, alias, err := d.cluster.ImageAliasGet(project, name, d.checkTrustedClient(r) == nil)
+	_, alias, err := d.cluster.ImageAliasGet(project, name, !public)
 	if err != nil {
 		return SmartError(err)
 	}
@@ -1673,7 +1677,7 @@ func aliasGet(d *Daemon, r *http.Request) Response {
 	return SyncResponseETag(true, alias, alias)
 }
 
-func aliasDelete(d *Daemon, r *http.Request) Response {
+func imageAliasDelete(d *Daemon, r *http.Request) Response {
 	project := projectParam(r)
 	name := mux.Vars(r)["name"]
 	_, _, err := d.cluster.ImageAliasGet(project, name, true)
@@ -1689,7 +1693,7 @@ func aliasDelete(d *Daemon, r *http.Request) Response {
 	return EmptySyncResponse
 }
 
-func aliasPut(d *Daemon, r *http.Request) Response {
+func imageAliasPut(d *Daemon, r *http.Request) Response {
 	// Get current value
 	project := projectParam(r)
 	name := mux.Vars(r)["name"]
@@ -1726,7 +1730,7 @@ func aliasPut(d *Daemon, r *http.Request) Response {
 	return EmptySyncResponse
 }
 
-func aliasPatch(d *Daemon, r *http.Request) Response {
+func imageAliasPatch(d *Daemon, r *http.Request) Response {
 	// Get current value
 	project := projectParam(r)
 	name := mux.Vars(r)["name"]
@@ -1779,7 +1783,7 @@ func aliasPatch(d *Daemon, r *http.Request) Response {
 	return EmptySyncResponse
 }
 
-func aliasPost(d *Daemon, r *http.Request) Response {
+func imageAliasPost(d *Daemon, r *http.Request) Response {
 	project := projectParam(r)
 	name := mux.Vars(r)["name"]
 
@@ -1811,7 +1815,7 @@ func imageExport(d *Daemon, r *http.Request) Response {
 	project := projectParam(r)
 	fingerprint := mux.Vars(r)["fingerprint"]
 
-	public := d.checkTrustedClient(r) != nil
+	public := d.checkTrustedClient(r) != nil || AllowProjectPermission("images", "view")(d, r) != EmptySyncResponse
 	secret := r.FormValue("secret")
 
 	var imgInfo *api.Image
@@ -2048,10 +2052,10 @@ func autoSyncImages(ctx context.Context, d *Daemon) error {
 		return errors.Wrap(err, "Failed to query image fingerprints of the node")
 	}
 
-	for fingerprint := range imageProjectInfo {
+	for fingerprint, projects := range imageProjectInfo {
 		ch := make(chan error)
 		go func() {
-			err := imageSyncBetweenNodes(d, fingerprint)
+			err := imageSyncBetweenNodes(d, projects[0], fingerprint)
 			if err != nil {
 				logger.Error("Failed to synchronize images", log.Ctx{"err": err, "fingerprint": fingerprint})
 			}
@@ -2068,7 +2072,7 @@ func autoSyncImages(ctx context.Context, d *Daemon) error {
 	return nil
 }
 
-func imageSyncBetweenNodes(d *Daemon, fingerprint string) error {
+func imageSyncBetweenNodes(d *Daemon, project string, fingerprint string) error {
 	var desiredSyncNodeCount int64
 
 	err := d.cluster.Transaction(func(tx *db.ClusterTx) error {
@@ -2135,6 +2139,9 @@ func imageSyncBetweenNodes(d *Daemon, fingerprint string) error {
 	if err != nil {
 		return errors.Wrap(err, "Failed to connect node for image synchronization")
 	}
+
+	// Select the right project
+	client = client.UseProject(project)
 
 	createArgs := &lxd.ImageCreateArgs{}
 	imageMetaPath := shared.VarPath("images", fingerprint)

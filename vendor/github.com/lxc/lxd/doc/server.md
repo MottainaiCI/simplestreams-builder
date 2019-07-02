@@ -19,7 +19,7 @@ cluster.https\_address              | string    | -         | clustering\_server
 cluster.offline\_threshold          | integer   | 20        | clustering                        | Number of seconds after which an unresponsive node is considered offline
 cluster.images\_minimal\_replica    | integer   | 3         | clustering\_image\_replication    | Minimal numbers of cluster members with a copy of a particular image (set 1 for no replication, -1 for all members)
 core.debug\_address                 | string    | -         | pprof\_http                       | Address to bind the pprof debug server to (HTTP)
-core.https\_address                 | string    | -         | -                                 | Address to bind for the remote API (HTTPs)
+core.https\_address                 | string    | -         | -                                 | Address to bind for the remote API (HTTPS)
 core.https\_allowed\_credentials    | boolean   | -         | -                                 | Whether to set Access-Control-Allow-Credentials http header value to "true"
 core.https\_allowed\_headers        | string    | -         | -                                 | Access-Control-Allow-Headers http header value
 core.https\_allowed\_methods        | string    | -         | -                                 | Access-Control-Allow-Methods http header value
@@ -35,6 +35,13 @@ images.remote\_cache\_expiry        | integer   | 10        | -                 
 maas.api.key                        | string    | -         | maas\_network                     | API key to manage MAAS
 maas.api.url                        | string    | -         | maas\_network                     | URL of the MAAS server
 maas.machine                        | string    | hostname  | maas\_network                     | Name of this LXD host in MAAS
+rbac.agent.url                      | string    |           | rbac                              | The Candid agent url as provided during RBAC registration
+rbac.agent.username                 | string    |           | rbac                              | The Candid agent username as provided during RBAC registration
+rbac.agent.public\_key              | string    |           | rbac                              | The Candid agent public key as provided during RBAC registration
+rbac.agent.private\_key             | string    |           | rbac                              | The Candid agent private key as provided during RBAC registration
+rbac.api.expiry                     | integer   |           | rbac                              | RBAC macaroon expiry in seconds
+rbac.api.key                        | string    |           | rbac                              | Public key of the RBAC server (required for HTTP-only servers)
+rbac.api.url                        | string    |           | rbac                              | URL of the external RBAC server
 
 Those keys can be set using the lxc tool with:
 

@@ -17,14 +17,13 @@ type cmdCallhook struct {
 
 func (c *cmdCallhook) Command() *cobra.Command {
 	cmd := &cobra.Command{}
-	cmd.Use = "callhook <path> <id> <state>"
+	cmd.Use = "callhook <path> <id> <hook>"
 	cmd.Short = "Call container lifecycle hook in LXD"
 	cmd.Long = `Description:
   Call container lifecycle hook in LXD
 
   This internal command notifies LXD about a container lifecycle event
-  (start, stop, restart) and blocks until LXD has processed it.
-
+  (start, stopns, stop, restart) and blocks until LXD has processed it.
 `
 	cmd.RunE = c.Run
 	cmd.Hidden = true
@@ -66,12 +65,21 @@ func (c *cmdCallhook) Run(cmd *cobra.Command, args []string) error {
 
 	// Prepare the request URL
 	url := fmt.Sprintf("/internal/containers/%s/on%s", id, state)
-	if state == "stop" {
+	if state == "stopns" {
+		target = os.Getenv("LXC_TARGET")
+		netns := os.Getenv("LXC_NET_NS")
+		if target == "" {
+			target = "unknown"
+		}
+		url = fmt.Sprintf("%s?target=%s&netns=%s", url, target, netns)
+	} else if state == "stop" {
 		target = os.Getenv("LXC_TARGET")
 		if target == "" {
 			target = "unknown"
 		}
 		url = fmt.Sprintf("%s?target=%s", url, target)
+	} else if state == "network-up" {
+		url = fmt.Sprintf("%s?device=%s&host_name=%s", url, args[3], os.Getenv("LXC_NET_PEER"))
 	}
 
 	// Setup the request
@@ -97,7 +105,10 @@ func (c *cmdCallhook) Run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("Hook didn't finish within 30s")
 	}
 
-	if target == "reboot" {
+	// If the container is rebooting, we purposefully tell LXC that this hook failed so that
+	// it won't reboot the container, which lets LXD start it again in the OnStop function.
+	// Other hook types can return without error safely.
+	if state == "stop" && target == "reboot" {
 		return fmt.Errorf("Reboot must be handled by LXD")
 	}
 

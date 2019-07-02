@@ -30,7 +30,7 @@
   name = "github.com/MottainaiCI/mottainai-server"
 
 [[constraint]]
-  branch = "master"
+  version = "lxd-3.14"
   name = "github.com/lxc/lxd"
 
 [[constraint]]

@@ -15,12 +15,14 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"golang.org/x/sys/unix"
 
 	"github.com/lxc/lxd/lxd/cluster"
 	"github.com/lxc/lxd/lxd/db"
 	"github.com/lxc/lxd/shared"
 	"github.com/lxc/lxd/shared/api"
 	"github.com/lxc/lxd/shared/logger"
+	"github.com/lxc/lxd/shared/netutils"
 	"github.com/lxc/lxd/shared/version"
 
 	log "github.com/lxc/lxd/shared/log15"
@@ -182,7 +184,7 @@ func (s *execWs) Do(op *operation) error {
 					}
 
 					// If an abnormal closure occurred, kill the attached process.
-					err := syscall.Kill(attachedChildPid, syscall.SIGKILL)
+					err := unix.Kill(attachedChildPid, unix.SIGKILL)
 					if err != nil {
 						logger.Debugf("Failed to send SIGKILL to pid %d", attachedChildPid)
 					} else {
@@ -223,7 +225,7 @@ func (s *execWs) Do(op *operation) error {
 						continue
 					}
 				} else if command.Command == "signal" {
-					if err := syscall.Kill(attachedChildPid, syscall.Signal(command.Signal)); err != nil {
+					if err := unix.Kill(attachedChildPid, unix.Signal(command.Signal)); err != nil {
 						logger.Debugf("Failed forwarding signal '%d' to PID %d", command.Signal, attachedChildPid)
 						continue
 					}
@@ -238,7 +240,7 @@ func (s *execWs) Do(op *operation) error {
 			s.connsLock.Unlock()
 
 			logger.Debugf("Starting to mirror websocket")
-			readDone, writeDone := shared.WebsocketExecMirror(conn, ptys[0], ptys[0], attachedChildIsDead, int(ptys[0].Fd()))
+			readDone, writeDone := netutils.WebsocketExecMirror(conn, ptys[0], ptys[0], attachedChildIsDead, int(ptys[0].Fd()))
 
 			<-readDone
 			<-writeDone

@@ -46,7 +46,7 @@ import_subdir_files() {
 import_subdir_files includes
 
 echo "==> Checking for dependencies"
-check_dependencies lxd lxc curl dnsmasq jq git xgettext sqlite3 msgmerge msgfmt shuf setfacl uuidgen socat
+check_dependencies lxd lxc curl dnsmasq jq git xgettext sqlite3 msgmerge msgfmt shuf setfacl uuidgen socat dig
 
 if [ "${USER:-'root'}" != "root" ]; then
   echo "The testsuite must be run as root." >&2
@@ -174,6 +174,11 @@ run_test test_remote_url "remote url handling"
 run_test test_remote_admin "remote administration"
 run_test test_remote_usage "remote usage"
 run_test test_basic_usage "basic usage"
+run_test test_container_devices_nic_p2p "container devices - nic - p2p"
+run_test test_container_devices_nic_bridged "container devices - nic - bridged"
+run_test test_container_devices_nic_physical "container devices - nic - physical"
+run_test test_container_devices_nic_macvlan "container devices - nic - macvlan"
+run_test test_container_devices_nic_ipvlan "container devices - nic - ipvlan"
 run_test test_security "security features"
 run_test test_security_protection "container protection"
 run_test test_image_expiry "image expiry"
@@ -219,6 +224,7 @@ run_test test_proxy_device "proxy device"
 run_test test_storage_local_volume_handling "storage local volume handling"
 run_test test_backup_import "backup import"
 run_test test_backup_export "backup export"
+run_test test_backup_rename "backup rename"
 run_test test_container_local_cross_pool_handling "container local cross pool handling"
 run_test test_incremental_copy "incremental container copy"
 run_test test_clustering_enable "clustering enable"
@@ -233,6 +239,7 @@ run_test test_clustering_shutdown_nodes "clustering shutdown"
 run_test test_clustering_projects "clustering projects"
 run_test test_clustering_address "clustering address"
 run_test test_clustering_image_replication "clustering image replication"
+run_test test_clustering_dns "clustering DNS"
 #run_test test_clustering_upgrade "clustering upgrade"
 
 # shellcheck disable=SC2034

@@ -150,6 +150,12 @@ func (s *rbdMigrationSourceDriver) SendWhileRunning(conn *websocket.Conn,
 	return nil
 }
 
+func (s *rbdMigrationSourceDriver) SendStorageVolume(conn *websocket.Conn, op *operation, bwlimit string, storage storage, volumeOnly bool) error {
+	msg := fmt.Sprintf("Function not implemented")
+	logger.Errorf(msg)
+	return fmt.Errorf(msg)
+}
+
 func (s *storageCeph) MigrationType() migration.MigrationFSType {
 	return migration.MigrationFSType_RBD
 }
@@ -336,6 +342,12 @@ func (s *storageCeph) MigrationSink(conn *websocket.Conn, op *operation, args Mi
 			return err
 		}
 		logger.Debugf(`Received RBD storage volume "%s"`, recvName)
+	}
+
+	// Re-generate the UUID
+	err = s.cephRBDGenerateUUID(projectPrefix(args.Container.Project(), args.Container.Name()), storagePoolVolumeTypeNameContainer)
+	if err != nil {
+		return err
 	}
 
 	containerMntPoint := getContainerMountPoint(args.Container.Project(), s.pool.Name, containerName)

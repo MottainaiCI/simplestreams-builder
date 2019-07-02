@@ -16,90 +16,103 @@ import (
 	log "github.com/lxc/lxd/shared/log15"
 )
 
-var containersCmd = Command{
-	name: "containers",
-	get:  containersGet,
-	post: containersPost,
+var containersCmd = APIEndpoint{
+	Name: "containers",
+
+	Get:  APIEndpointAction{Handler: containersGet, AccessHandler: AllowProjectPermission("containers", "view")},
+	Post: APIEndpointAction{Handler: containersPost, AccessHandler: AllowProjectPermission("containers", "manage-containers")},
 }
 
-var containerCmd = Command{
-	name:   "containers/{name}",
-	get:    containerGet,
-	put:    containerPut,
-	delete: containerDelete,
-	post:   containerPost,
-	patch:  containerPatch,
+var containerCmd = APIEndpoint{
+	Name: "containers/{name}",
+
+	Get:    APIEndpointAction{Handler: containerGet, AccessHandler: AllowProjectPermission("containers", "view")},
+	Put:    APIEndpointAction{Handler: containerPut, AccessHandler: AllowProjectPermission("containers", "manage-containers")},
+	Delete: APIEndpointAction{Handler: containerDelete, AccessHandler: AllowProjectPermission("containers", "manage-containers")},
+	Post:   APIEndpointAction{Handler: containerPost, AccessHandler: AllowProjectPermission("containers", "manage-containers")},
+	Patch:  APIEndpointAction{Handler: containerPatch, AccessHandler: AllowProjectPermission("containers", "manage-containers")},
 }
 
-var containerStateCmd = Command{
-	name: "containers/{name}/state",
-	get:  containerState,
-	put:  containerStatePut,
+var containerStateCmd = APIEndpoint{
+	Name: "containers/{name}/state",
+
+	Get: APIEndpointAction{Handler: containerState, AccessHandler: AllowProjectPermission("containers", "view")},
+	Put: APIEndpointAction{Handler: containerStatePut, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
 }
 
-var containerFileCmd = Command{
-	name:   "containers/{name}/files",
-	get:    containerFileHandler,
-	post:   containerFileHandler,
-	delete: containerFileHandler,
+var containerFileCmd = APIEndpoint{
+	Name: "containers/{name}/files",
+
+	Get:    APIEndpointAction{Handler: containerFileHandler, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
+	Post:   APIEndpointAction{Handler: containerFileHandler, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
+	Delete: APIEndpointAction{Handler: containerFileHandler, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
 }
 
-var containerSnapshotsCmd = Command{
-	name: "containers/{name}/snapshots",
-	get:  containerSnapshotsGet,
-	post: containerSnapshotsPost,
+var containerSnapshotsCmd = APIEndpoint{
+	Name: "containers/{name}/snapshots",
+
+	Get:  APIEndpointAction{Handler: containerSnapshotsGet, AccessHandler: AllowProjectPermission("containers", "view")},
+	Post: APIEndpointAction{Handler: containerSnapshotsPost, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
 }
 
-var containerSnapshotCmd = Command{
-	name:   "containers/{name}/snapshots/{snapshotName}",
-	get:    snapshotHandler,
-	post:   snapshotHandler,
-	delete: snapshotHandler,
-	put:    snapshotHandler,
+var containerSnapshotCmd = APIEndpoint{
+	Name: "containers/{name}/snapshots/{snapshotName}",
+
+	Get:    APIEndpointAction{Handler: containerSnapshotHandler, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
+	Post:   APIEndpointAction{Handler: containerSnapshotHandler, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
+	Delete: APIEndpointAction{Handler: containerSnapshotHandler, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
+	Put:    APIEndpointAction{Handler: containerSnapshotHandler, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
 }
 
-var containerConsoleCmd = Command{
-	name:   "containers/{name}/console",
-	get:    containerConsoleLogGet,
-	post:   containerConsolePost,
-	delete: containerConsoleLogDelete,
+var containerConsoleCmd = APIEndpoint{
+	Name: "containers/{name}/console",
+
+	Get:    APIEndpointAction{Handler: containerConsoleLogGet, AccessHandler: AllowProjectPermission("containers", "view")},
+	Post:   APIEndpointAction{Handler: containerConsolePost, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
+	Delete: APIEndpointAction{Handler: containerConsoleLogDelete, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
 }
 
-var containerExecCmd = Command{
-	name: "containers/{name}/exec",
-	post: containerExecPost,
+var containerExecCmd = APIEndpoint{
+	Name: "containers/{name}/exec",
+
+	Post: APIEndpointAction{Handler: containerExecPost, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
 }
 
-var containerMetadataCmd = Command{
-	name: "containers/{name}/metadata",
-	get:  containerMetadataGet,
-	put:  containerMetadataPut,
+var containerMetadataCmd = APIEndpoint{
+	Name: "containers/{name}/metadata",
+
+	Get: APIEndpointAction{Handler: containerMetadataGet, AccessHandler: AllowProjectPermission("containers", "view")},
+	Put: APIEndpointAction{Handler: containerMetadataPut, AccessHandler: AllowProjectPermission("containers", "manage-containers")},
 }
 
-var containerMetadataTemplatesCmd = Command{
-	name:   "containers/{name}/metadata/templates",
-	get:    containerMetadataTemplatesGet,
-	post:   containerMetadataTemplatesPostPut,
-	put:    containerMetadataTemplatesPostPut,
-	delete: containerMetadataTemplatesDelete,
+var containerMetadataTemplatesCmd = APIEndpoint{
+	Name: "containers/{name}/metadata/templates",
+
+	Get:    APIEndpointAction{Handler: containerMetadataTemplatesGet, AccessHandler: AllowProjectPermission("containers", "view")},
+	Post:   APIEndpointAction{Handler: containerMetadataTemplatesPostPut, AccessHandler: AllowProjectPermission("containers", "manage-containers")},
+	Put:    APIEndpointAction{Handler: containerMetadataTemplatesPostPut, AccessHandler: AllowProjectPermission("containers", "manage-containers")},
+	Delete: APIEndpointAction{Handler: containerMetadataTemplatesDelete, AccessHandler: AllowProjectPermission("containers", "manage-containers")},
 }
 
-var containerBackupsCmd = Command{
-	name: "containers/{name}/backups",
-	get:  containerBackupsGet,
-	post: containerBackupsPost,
+var containerBackupsCmd = APIEndpoint{
+	Name: "containers/{name}/backups",
+
+	Get:  APIEndpointAction{Handler: containerBackupsGet, AccessHandler: AllowProjectPermission("containers", "view")},
+	Post: APIEndpointAction{Handler: containerBackupsPost, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
 }
 
-var containerBackupCmd = Command{
-	name:   "containers/{name}/backups/{backupName}",
-	get:    containerBackupGet,
-	post:   containerBackupPost,
-	delete: containerBackupDelete,
+var containerBackupCmd = APIEndpoint{
+	Name: "containers/{name}/backups/{backupName}",
+
+	Get:    APIEndpointAction{Handler: containerBackupGet, AccessHandler: AllowProjectPermission("containers", "view")},
+	Post:   APIEndpointAction{Handler: containerBackupPost, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
+	Delete: APIEndpointAction{Handler: containerBackupDelete, AccessHandler: AllowProjectPermission("containers", "operate-containers")},
 }
 
-var containerBackupExportCmd = Command{
-	name: "containers/{name}/backups/{backupName}/export",
-	get:  containerBackupExportGet,
+var containerBackupExportCmd = APIEndpoint{
+	Name: "containers/{name}/backups/{backupName}/export",
+
+	Get: APIEndpointAction{Handler: containerBackupExportGet, AccessHandler: AllowProjectPermission("containers", "view")},
 }
 
 type containerAutostartList []container
@@ -277,12 +290,12 @@ func containersShutdown(s *state.State) error {
 			go func(c container, lastState string) {
 				c.Shutdown(time.Second * time.Duration(timeoutSeconds))
 				c.Stop(false)
-				c.ConfigKeySet("volatile.last_state.power", lastState)
+				c.VolatileSet(map[string]string{"volatile.last_state.power": lastState})
 
 				wg.Done()
 			}(c, lastState)
 		} else {
-			c.ConfigKeySet("volatile.last_state.power", lastState)
+			c.VolatileSet(map[string]string{"volatile.last_state.power": lastState})
 		}
 	}
 	wg.Wait()

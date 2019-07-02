@@ -10,19 +10,21 @@ import (
 	"github.com/lxc/lxd/shared/api"
 )
 
-var serverResourceCmd = Command{
-	name: "resources",
-	get:  serverResourcesGet,
+var api10ResourcesCmd = APIEndpoint{
+	Name: "resources",
+
+	Get: APIEndpointAction{Handler: api10ResourcesGet, AccessHandler: AllowAuthenticated},
 }
 
-var storagePoolResourcesCmd = Command{
-	name: "storage-pools/{name}/resources",
-	get:  storagePoolResourcesGet,
+var storagePoolResourcesCmd = APIEndpoint{
+	Name: "storage-pools/{name}/resources",
+
+	Get: APIEndpointAction{Handler: storagePoolResourcesGet, AccessHandler: AllowAuthenticated},
 }
 
 // /1.0/resources
 // Get system resources
-func serverResourcesGet(d *Daemon, r *http.Request) Response {
+func api10ResourcesGet(d *Daemon, r *http.Request) Response {
 	// If a target was specified, forward the request to the relevant node.
 	response := ForwardedResponseIfTargetIsRemote(d, r)
 	if response != nil {

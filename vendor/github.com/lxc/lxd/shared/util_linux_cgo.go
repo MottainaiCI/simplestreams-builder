@@ -10,8 +10,9 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/lxc/lxd/shared/logger"
 )
@@ -34,16 +35,6 @@ import (
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
-
-#include "../lxd/include/memory_utils.h"
-
-#ifndef AT_SYMLINK_FOLLOW
-#define AT_SYMLINK_FOLLOW    0x400
-#endif
-
-#ifndef AT_EMPTY_PATH
-#define AT_EMPTY_PATH       0x1000
-#endif
 
 #define ABSTRACT_UNIX_SOCK_LEN sizeof(((struct sockaddr_un *)0)->sun_path)
 
@@ -144,86 +135,6 @@ again:
 
 	return ret;
 }
-
-int lxc_abstract_unix_send_fds(int fd, int *sendfds, int num_sendfds,
-			       void *data, size_t size)
-{
-	__do_free char *cmsgbuf = NULL;
-	struct msghdr msg;
-	struct iovec iov;
-	struct cmsghdr *cmsg = NULL;
-	char buf[1] = {0};
-	size_t cmsgbufsize = CMSG_SPACE(num_sendfds * sizeof(int));
-
-	memset(&msg, 0, sizeof(msg));
-	memset(&iov, 0, sizeof(iov));
-
-	cmsgbuf = malloc(cmsgbufsize);
-	if (!cmsgbuf)
-		return -1;
-
-	msg.msg_control = cmsgbuf;
-	msg.msg_controllen = cmsgbufsize;
-
-	cmsg = CMSG_FIRSTHDR(&msg);
-	cmsg->cmsg_level = SOL_SOCKET;
-	cmsg->cmsg_type = SCM_RIGHTS;
-	cmsg->cmsg_len = CMSG_LEN(num_sendfds * sizeof(int));
-
-	msg.msg_controllen = cmsg->cmsg_len;
-
-	memcpy(CMSG_DATA(cmsg), sendfds, num_sendfds * sizeof(int));
-
-	iov.iov_base = data ? data : buf;
-	iov.iov_len = data ? size : sizeof(buf);
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-
-	return sendmsg(fd, &msg, MSG_NOSIGNAL);
-}
-
-int lxc_abstract_unix_recv_fds(int fd, int *recvfds, int num_recvfds,
-			       void *data, size_t size)
-{
-	__do_free char *cmsgbuf = NULL;
-	int ret;
-	struct msghdr msg;
-	struct iovec iov;
-	struct cmsghdr *cmsg = NULL;
-	char buf[1] = {0};
-	size_t cmsgbufsize = CMSG_SPACE(num_recvfds * sizeof(int));
-
-	memset(&msg, 0, sizeof(msg));
-	memset(&iov, 0, sizeof(iov));
-
-	cmsgbuf = malloc(cmsgbufsize);
-	if (!cmsgbuf)
-		return -1;
-
-	msg.msg_control = cmsgbuf;
-	msg.msg_controllen = cmsgbufsize;
-
-	iov.iov_base = data ? data : buf;
-	iov.iov_len = data ? size : sizeof(buf);
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-
-	ret = recvmsg(fd, &msg, 0);
-	if (ret <= 0) {
-		fprintf(stderr, "%s - Failed to receive file descriptor\n", strerror(errno));
-		return ret;
-	}
-
-	cmsg = CMSG_FIRSTHDR(&msg);
-
-	memset(recvfds, -1, num_recvfds * sizeof(int));
-	if (cmsg && cmsg->cmsg_len == CMSG_LEN(num_recvfds * sizeof(int)) &&
-	    cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS) {
-		memcpy(recvfds, CMSG_DATA(cmsg), num_recvfds * sizeof(int));
-	}
-
-	return ret;
-}
 */
 // #cgo CFLAGS: -std=gnu11 -Wvla
 import "C"
@@ -244,33 +155,10 @@ func GetPollRevents(fd int, timeout int, flags int) (int, int, error) {
 
 	ret := C.get_poll_revents(C.int(fd), C.int(timeout), C.int(flags), &revents, &saved_errno)
 	if int(ret) < 0 {
-		err = syscall.Errno(saved_errno)
+		err = unix.Errno(saved_errno)
 	}
 
 	return int(ret), int(revents), err
-}
-
-func AbstractUnixSendFd(sockFD int, sendFD int) error {
-	fd := C.int(sendFD)
-	sk_fd := C.int(sockFD)
-	ret := C.lxc_abstract_unix_send_fds(sk_fd, &fd, C.int(1), nil, C.size_t(0))
-	if ret < 0 {
-		return fmt.Errorf("Failed to send file descriptor via abstract unix socket")
-	}
-
-	return nil
-}
-
-func AbstractUnixReceiveFd(sockFD int) (*os.File, error) {
-	fd := C.int(-1)
-	sk_fd := C.int(sockFD)
-	ret := C.lxc_abstract_unix_recv_fds(sk_fd, &fd, C.int(1), nil, C.size_t(0))
-	if ret < 0 {
-		return nil, fmt.Errorf("Failed to receive file descriptor via abstract unix socket")
-	}
-
-	file := os.NewFile(uintptr(fd), "")
-	return file, nil
 }
 
 func OpenPty(uid, gid int64) (master *os.File, slave *os.File, err error) {
@@ -335,7 +223,7 @@ again:
 	if rv < 0 {
 		// OOM killer will take care of us if we end up doing this too
 		// often.
-		if errno == syscall.ERANGE {
+		if errno == unix.ERANGE {
 			bufSize *= 2
 			tmp := C.realloc(buf, C.size_t(bufSize))
 			if tmp == nil {
@@ -344,7 +232,7 @@ again:
 			buf = tmp
 			goto again
 		}
-		return -1, fmt.Errorf("failed user lookup: %s", syscall.Errno(rv))
+		return -1, fmt.Errorf("failed user lookup: %s", unix.Errno(rv))
 	}
 
 	if result == nil {
@@ -381,7 +269,7 @@ again:
 	if rv != 0 {
 		// OOM killer will take care of us if we end up doing this too
 		// often.
-		if errno == syscall.ERANGE {
+		if errno == unix.ERANGE {
 			bufSize *= 2
 			tmp := C.realloc(buf, C.size_t(bufSize))
 			if tmp == nil {
@@ -392,7 +280,7 @@ again:
 		}
 
 		C.free(buf)
-		return -1, fmt.Errorf("failed group lookup: %s", syscall.Errno(rv))
+		return -1, fmt.Errorf("failed group lookup: %s", unix.Errno(rv))
 	}
 	C.free(buf)
 

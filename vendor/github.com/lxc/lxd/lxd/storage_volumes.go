@@ -21,43 +21,48 @@ import (
 	log "github.com/lxc/lxd/shared/log15"
 )
 
-var storagePoolVolumesCmd = Command{
-	name: "storage-pools/{name}/volumes",
-	get:  storagePoolVolumesGet,
-	post: storagePoolVolumesPost,
+var storagePoolVolumesCmd = APIEndpoint{
+	Name: "storage-pools/{name}/volumes",
+
+	Get:  APIEndpointAction{Handler: storagePoolVolumesGet, AccessHandler: AllowAuthenticated},
+	Post: APIEndpointAction{Handler: storagePoolVolumesPost},
 }
 
-var storagePoolVolumesTypeCmd = Command{
-	name: "storage-pools/{name}/volumes/{type}",
-	get:  storagePoolVolumesTypeGet,
-	post: storagePoolVolumesTypePost,
+var storagePoolVolumesTypeCmd = APIEndpoint{
+	Name: "storage-pools/{name}/volumes/{type}",
+
+	Get:  APIEndpointAction{Handler: storagePoolVolumesTypeGet, AccessHandler: AllowAuthenticated},
+	Post: APIEndpointAction{Handler: storagePoolVolumesTypePost},
 }
 
-var storagePoolVolumeTypeContainerCmd = Command{
-	name:   "storage-pools/{pool}/volumes/container/{name:.*}",
-	post:   storagePoolVolumeTypeContainerPost,
-	get:    storagePoolVolumeTypeContainerGet,
-	put:    storagePoolVolumeTypeContainerPut,
-	patch:  storagePoolVolumeTypeContainerPatch,
-	delete: storagePoolVolumeTypeContainerDelete,
+var storagePoolVolumeTypeContainerCmd = APIEndpoint{
+	Name: "storage-pools/{pool}/volumes/container/{name:.*}",
+
+	Delete: APIEndpointAction{Handler: storagePoolVolumeTypeContainerDelete},
+	Get:    APIEndpointAction{Handler: storagePoolVolumeTypeContainerGet, AccessHandler: AllowAuthenticated},
+	Patch:  APIEndpointAction{Handler: storagePoolVolumeTypeContainerPatch},
+	Post:   APIEndpointAction{Handler: storagePoolVolumeTypeContainerPost},
+	Put:    APIEndpointAction{Handler: storagePoolVolumeTypeContainerPut},
 }
 
-var storagePoolVolumeTypeCustomCmd = Command{
-	name:   "storage-pools/{pool}/volumes/custom/{name}",
-	post:   storagePoolVolumeTypeCustomPost,
-	get:    storagePoolVolumeTypeCustomGet,
-	put:    storagePoolVolumeTypeCustomPut,
-	patch:  storagePoolVolumeTypeCustomPatch,
-	delete: storagePoolVolumeTypeCustomDelete,
+var storagePoolVolumeTypeCustomCmd = APIEndpoint{
+	Name: "storage-pools/{pool}/volumes/custom/{name}",
+
+	Delete: APIEndpointAction{Handler: storagePoolVolumeTypeCustomDelete},
+	Get:    APIEndpointAction{Handler: storagePoolVolumeTypeCustomGet, AccessHandler: AllowAuthenticated},
+	Patch:  APIEndpointAction{Handler: storagePoolVolumeTypeCustomPatch},
+	Post:   APIEndpointAction{Handler: storagePoolVolumeTypeCustomPost},
+	Put:    APIEndpointAction{Handler: storagePoolVolumeTypeCustomPut},
 }
 
-var storagePoolVolumeTypeImageCmd = Command{
-	name:   "storage-pools/{pool}/volumes/image/{name}",
-	post:   storagePoolVolumeTypeImagePost,
-	get:    storagePoolVolumeTypeImageGet,
-	put:    storagePoolVolumeTypeImagePut,
-	patch:  storagePoolVolumeTypeImagePatch,
-	delete: storagePoolVolumeTypeImageDelete,
+var storagePoolVolumeTypeImageCmd = APIEndpoint{
+	Name: "storage-pools/{pool}/volumes/image/{name}",
+
+	Delete: APIEndpointAction{Handler: storagePoolVolumeTypeImageDelete},
+	Get:    APIEndpointAction{Handler: storagePoolVolumeTypeImageGet, AccessHandler: AllowAuthenticated},
+	Patch:  APIEndpointAction{Handler: storagePoolVolumeTypeImagePatch},
+	Post:   APIEndpointAction{Handler: storagePoolVolumeTypeImagePost},
+	Put:    APIEndpointAction{Handler: storagePoolVolumeTypeImagePut},
 }
 
 // /1.0/storage-pools/{name}/volumes
@@ -390,9 +395,10 @@ func doVolumeMigration(d *Daemon, poolName string, req *api.StorageVolumesPost) 
 		Dialer: websocket.Dialer{
 			TLSClientConfig: config,
 			NetDial:         shared.RFC3493Dialer},
-		Secrets: req.Source.Websockets,
-		Push:    push,
-		Storage: storage,
+		Secrets:    req.Source.Websockets,
+		Push:       push,
+		Storage:    storage,
+		VolumeOnly: req.Source.VolumeOnly,
 	}
 
 	sink, err := NewStorageMigrationSink(&migrationArgs)
@@ -521,7 +527,7 @@ func storagePoolVolumeTypePost(d *Daemon, r *http.Request, volumeTypeName string
 
 	// This is a migration request so send back requested secrets
 	if req.Migration {
-		ws, err := NewStorageMigrationSource(s)
+		ws, err := NewStorageMigrationSource(s, req.VolumeOnly)
 		if err != nil {
 			return InternalError(err)
 		}

@@ -120,9 +120,9 @@ func HostPath(path string) string {
 	}
 
 	// Check if we're running in a snap package
-	snap := os.Getenv("SNAP")
+	_, inSnap := os.LookupEnv("SNAP")
 	snapName := os.Getenv("SNAP_NAME")
-	if snap == "" || snapName != "lxd" {
+	if !inSnap || snapName != "lxd" {
 		return path
 	}
 
@@ -542,6 +542,17 @@ func Int64InSlice(key int64, list []int64) bool {
 func IsTrue(value string) bool {
 	if StringInSlice(strings.ToLower(value), []string{"true", "1", "yes", "on"}) {
 		return true
+	}
+
+	return false
+}
+
+// StringMapHasStringKey returns true if any of the supplied keys are present in the map.
+func StringMapHasStringKey(m map[string]string, keys ...string) bool {
+	for _, k := range keys {
+		if _, ok := m[k]; ok {
+			return true
+		}
 	}
 
 	return false

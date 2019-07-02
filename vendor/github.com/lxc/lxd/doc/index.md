@@ -34,7 +34,7 @@ later to work. On ubuntu, you can get those with:
 
 ```bash
 sudo apt update
-sudo apt install acl autoconf dnsmasq-base git golang libacl1-dev libcap-dev liblxc1 liblxc-dev libtool libuv1-dev make pkg-config rsync squashfs-tools tar tcl xz-utils
+sudo apt install acl autoconf dnsmasq-base git golang libacl1-dev libcap-dev liblxc1 liblxc-dev libtool libuv1-dev make pkg-config rsync squashfs-tools tar tcl xz-utils ebtables
 ```
 
 Note that when building LXC yourself, ensure to build it with the appropriate
@@ -57,7 +57,7 @@ sudo apt install btrfs-tools
 To run the testsuite, you'll also need:
 
 ```bash
-sudo apt install curl gettext jq sqlite3 uuid-runtime bzr
+sudo apt install curl gettext jq sqlite3 uuid-runtime bzr socat
 ```
 
 
@@ -100,6 +100,21 @@ group to talk to LXD; you can create your own group if you want):
 ```bash
 sudo -E LD_LIBRARY_PATH=$LD_LIBRARY_PATH $GOPATH/bin/lxd --group sudo
 ```
+
+## Security
+LXD, similar to other container managers provides a UNIX socket for local communication.
+
+**WARNING**: Anyone with access to that socket can fully control LXD, which includes
+the ability to attach host devices and filesystems, this should
+therefore only be given to users who would be trusted with root access
+to the host.
+
+When listening on the network, the same API is available on a TLS socket
+(HTTPS), specific access on the remote API can be restricted through
+Canonical RBAC.
+
+
+More details are [available here](security.md).
 
 ## Getting started with LXD
 Now that you have LXD running on your system you can read the [getting started guide](https://linuxcontainers.org/lxd/getting-started-cli/) or go through more examples and configurations in [our documentation](https://lxd.readthedocs.org).

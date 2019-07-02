@@ -3,14 +3,6 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:207d1c991e823eaa28f97c9f49f5b687e6ee45dccb012a74c6c934981ccf64a6"
-  name = "code.cloudfoundry.org/systemcerts"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "ca00b2f806f2fa1ded784ade357bad1ea3f1fbbe"
-
-[[projects]]
-  branch = "master"
   digest = "1:6da51e5ec493ad2b44cb04129e2d0a068c8fb9bd6cb5739d199573558696bb94"
   name = "github.com/Azure/go-ansiterm"
   packages = [
@@ -34,7 +26,7 @@
   name = "github.com/MottainaiCI/mottainai-server"
   packages = ["pkg/utils"]
   pruneopts = "UT"
-  revision = "78ba91f7ec9dc8f2eb38f5fe4d909d03c2ab797e"
+  revision = "a842fb8f0d64ffa230d488896f3d9972dab7472f"
 
 [[projects]]
   branch = "master"
@@ -263,8 +255,7 @@
   version = "v1.0.2"
 
 [[projects]]
-  branch = "master"
-  digest = "1:e43c9a7d35236a27c90dd21f5efb8dfb6905d3c997b841f1a4b499d7e4c606c7"
+  digest = "1:165f0dcb43f9de8a538c789669a0b5f66da4622a57a8eb5320aa6e66e2618ada"
   name = "github.com/lxc/lxd"
   packages = [
     "shared",
@@ -276,7 +267,8 @@
     "shared/simplestreams",
   ]
   pruneopts = "T"
-  revision = "164d63f3e33661c5e89edf450e5f1f8806ed6a5d"
+  revision = "d3ac182f55faae8f9540b6577ea78581f73a83a4"
+  version = "lxd-3.14"
 
 [[projects]]
   digest = "1:c568d7727aa262c32bdf8a3f7db83614f7af0ed661474b24588de635c20024c7"
