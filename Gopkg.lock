@@ -255,6 +255,14 @@
   version = "v1.0.2"
 
 [[projects]]
+  branch = "master"
+  digest = "1:49b3cd7c8ecd6218419b45325cde2df8d5877bb72f4959a7e182da60df8e5c23"
+  name = "github.com/lxc/distrobuilder"
+  packages = ["shared"]
+  pruneopts = "UT"
+  revision = "7540ba58ac15ee03cbcdbc3b059c92538ca5ae39"
+
+[[projects]]
   digest = "1:165f0dcb43f9de8a538c789669a0b5f66da4622a57a8eb5320aa6e66e2618ada"
   name = "github.com/lxc/lxd"
   packages = [
@@ -537,6 +545,14 @@
   version = "v1.2.0"
 
 [[projects]]
+  digest = "1:434aab943cc1c082c9df36bd4b1f107d9ef4af930d2ce13d3f2eb008df9196f0"
+  name = "gopkg.in/flosch/pongo2.v3"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "5e81b817a0c48c1c57cdf1a9056cf76bdee02ca9"
+  version = "v3.0"
+
+[[projects]]
   branch = "v2"
   digest = "1:e8c48aa61ea272e211858e52979ad4d114c60bfe6900d12431ac697482100b0a"
   name = "gopkg.in/robfig/cron.v2"
@@ -637,6 +653,7 @@
   analyzer-version = 1
   input-imports = [
     "github.com/MottainaiCI/mottainai-server/pkg/utils",
+    "github.com/lxc/distrobuilder/shared",
     "github.com/lxc/lxd/shared/simplestreams",
     "github.com/spf13/cobra",
     "github.com/spf13/viper",
