@@ -125,6 +125,10 @@ func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_s
 			prodManifest.Version = v.Version
 		}
 
+		if manifest.SupportEOL != "" {
+			prodManifest.SupportedEOL = manifest.SupportEOL
+		}
+
 		if len(v.Aliases) > 0 {
 			prodManifest.Aliases = strings.Join(v.Aliases, ",")
 		}

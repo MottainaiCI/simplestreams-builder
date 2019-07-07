@@ -70,7 +70,12 @@ func newBuildVersionsManifestCommand(config *conf.BuilderTreeConfig) *cobra.Comm
 			productDir = fmt.Sprintf("%s/%s", config.Viper.Get("source-dir"),
 				ssp.Directory)
 
-			manifest, err := images.BuildVersionsManifest(ssp, productDir, config.Prefix)
+			manifest, err := images.BuildVersionsManifest(ssp, images.BuildVersionsManifestOptions{
+				ProductDir:          productDir,
+				PrefixPath:          config.Prefix,
+				ImageFile:           config.Viper.GetString("product-image-file"),
+				ForceExpireDuration: config.Viper.GetString("force-expire"),
+			})
 			utils.CheckError(err)
 
 			if config.Viper.GetBool("stdout-manifest") {
@@ -117,6 +122,8 @@ func newBuildVersionsManifestCommand(config *conf.BuilderTreeConfig) *cobra.Comm
 	config.Viper.BindPFlag("product", pflags.Lookup("product"))
 	pflags.StringP("source-dir", "s", "", "Directory where retrieve images for Manifest.")
 	config.Viper.BindPFlag("source-dir", pflags.Lookup("source-dir"))
+	pflags.StringP("force-expire", "e", "", "Force expire duration and ignore image file.")
+	config.Viper.BindPFlag("force-expire", pflags.Lookup("force-expire"))
 
 	return cmd
 }

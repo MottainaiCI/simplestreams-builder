@@ -22,6 +22,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package images
 
 import (
+	"bytes"
 	"crypto/md5"
 	"crypto/sha256"
 	"crypto/tls"
@@ -37,7 +38,9 @@ import (
 	"strings"
 	"time"
 
+	d_shared "github.com/lxc/distrobuilder/shared"
 	lxd_streams "github.com/lxc/lxd/shared/simplestreams"
+	v "github.com/spf13/viper"
 
 	config "github.com/MottainaiCI/simplestreams-builder/pkg/config"
 )
@@ -45,8 +48,16 @@ import (
 const BYTE_BUFFER_LEN = 256
 
 type VersionsSSBuilderManifest struct {
-	Name     string                                                     `json:"name"`
-	Versions map[string]lxd_streams.SimpleStreamsManifestProductVersion `json:"versions"`
+	Name       string                                                     `json:"name"`
+	SupportEOL string                                                     `json:"expiry,omitempty"`
+	Versions   map[string]lxd_streams.SimpleStreamsManifestProductVersion `json:"versions"`
+}
+
+type BuildVersionsManifestOptions struct {
+	ProductDir          string
+	PrefixPath          string
+	ForceExpireDuration string
+	ImageFile           string
 }
 
 type CombinedSha256Builder struct {
@@ -66,10 +77,10 @@ func newCombinedSha256Builder() CombinedSha256Builder {
 }
 
 func BuildVersionsManifest(product *config.SimpleStreamsProduct,
-	productDir, prefix string) (*VersionsSSBuilderManifest, error) {
+	opts BuildVersionsManifestOptions) (*VersionsSSBuilderManifest, error) {
 	var err error
 	var files []os.FileInfo
-	var productBasePath, itemDir string
+	var productBasePath, itemDir, eolDuration string
 	var item, lxdTarXzItem *lxd_streams.SimpleStreamsManifestProductVersionItem
 	var ans *VersionsSSBuilderManifest = &VersionsSSBuilderManifest{
 		Name:     product.Name,
@@ -77,8 +88,29 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 	}
 	var combined CombinedSha256Builder
 
+	if opts.ImageFile != "" && opts.ForceExpireDuration == "" {
+		var imageDef *d_shared.Definition
+		imageDef, err = ReadImageFile(opts.ImageFile, opts.PrefixPath)
+		if err != nil {
+			fmt.Printf("Error on retrieve data from image file %s\n", opts.ImageFile)
+			return nil, err
+		}
+
+		eolDuration = imageDef.Image.Expiry
+	} else if opts.ForceExpireDuration != "" {
+		eolDuration = opts.ForceExpireDuration
+	}
+
+	if eolDuration != "" {
+		now := time.Now()
+		eol := d_shared.GetExpiryDate(now, eolDuration)
+		if !now.Equal(eol) {
+			ans.SupportEOL = fmt.Sprintf("%d", eol)
+		}
+	}
+
 	// Iterate for every sub-directories that match with regex
-	files, err = ioutil.ReadDir(productDir)
+	files, err = ioutil.ReadDir(opts.ProductDir)
 	if err != nil {
 		return nil, err
 	}
@@ -107,9 +139,9 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 		}
 
 		productBasePath = path.Join(
-			strings.TrimRight(prefix, "/"),
+			strings.TrimRight(opts.PrefixPath, "/"),
 			path.Join(product.Directory, f.Name()))
-		itemDir = path.Join(productDir, f.Name())
+		itemDir = path.Join(opts.ProductDir, f.Name())
 		combined = newCombinedSha256Builder()
 		fmt.Println(fmt.Sprintf("For product %s I use base path %s.",
 			product.Name, productBasePath))
@@ -305,4 +337,44 @@ func ReadVersionsManifestJson(ssbPath string) (*VersionsSSBuilderManifest, error
 	}
 
 	return ans, nil
+}
+
+func ReadImageFile(imageFile, prefixPath string) (*d_shared.Definition, error) {
+	var err error
+	var image string
+	var ibytes []byte
+	var ans d_shared.Definition
+
+	if _, err = os.Stat(path.Join(prefixPath, imageFile)); os.IsNotExist(err) {
+		// Check if exists a local image file or through path defined if there is ABS.
+		if _, err = os.Stat(imageFile); os.IsNotExist(err) {
+			return nil, fmt.Errorf("Image file %s not found.", imageFile)
+		}
+		image = imageFile
+	} else {
+		image = path.Join(prefixPath, imageFile)
+	}
+
+	// Read configuration
+	ibytes, err = ioutil.ReadFile(image)
+	if err != nil {
+		fmt.Printf("Error on read file %s!\n", image)
+		return nil, err
+	}
+
+	viper := v.New()
+	viper.SetConfigType("yaml")
+	err = viper.ReadConfig(bytes.NewBuffer(ibytes))
+	if err != nil {
+		fmt.Printf("Error on process configuration file %s\n", image)
+		return nil, err
+	}
+
+	err = viper.Unmarshal(&ans)
+	if err != nil {
+		fmt.Printf("Error on unmarshal file %s: %s\n", image, err.Error())
+		return nil, err
+	}
+
+	return &ans, nil
 }
