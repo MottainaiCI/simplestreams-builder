@@ -124,6 +124,10 @@ func newBuildVersionsManifestCommand(config *conf.BuilderTreeConfig) *cobra.Comm
 	config.Viper.BindPFlag("source-dir", pflags.Lookup("source-dir"))
 	pflags.StringP("force-expire", "e", "", "Force expire duration and ignore image file.")
 	config.Viper.BindPFlag("force-expire", pflags.Lookup("force-expire"))
+	pflags.StringP("product-image-file", "i", "",
+		`Name of the file used by distrobuilder.
+Default is image.yaml.`)
+	config.Viper.BindPFlag("product-image-file", pflags.Lookup("product-image-file"))
 
 	return cmd
 }
