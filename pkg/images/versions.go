@@ -105,7 +105,9 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 		now := time.Now()
 		eol := d_shared.GetExpiryDate(now, eolDuration)
 		if !now.Equal(eol) {
-			ans.SupportEOL = fmt.Sprintf("%d", eol)
+			ans.SupportEOL = fmt.Sprintf("%d", eol.Unix())
+			fmt.Printf("For product %s use SupportEOL = %s (%d)\n",
+				product.Name, ans.SupportEOL, eolDuration)
 		}
 	}
 
