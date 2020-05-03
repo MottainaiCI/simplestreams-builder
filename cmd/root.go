@@ -38,7 +38,7 @@ Copyright (c) 2019 Mottainai
 
 Mottainai - LXC/LXD Simplestreams Tree Builder`
 
-	SSB_VERSION = `0.1.0`
+	SSB_VERSION = `0.2.0-dev`
 )
 
 func initConfig(config *conf.BuilderTreeConfig) {
