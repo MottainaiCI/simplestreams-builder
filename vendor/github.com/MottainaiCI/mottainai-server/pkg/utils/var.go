@@ -232,7 +232,7 @@ func randomInt(max *big.Int) (int, error) {
 func Strip(s string) (string, error) {
 
 	// Make a Regex to say we only want
-	reg, err := regexp.Compile("[^a-zA-Z0-9-:]+")
+	reg, err := regexp.Compile("[^a-zA-Z0-9[-][:][.]]+")
 	if err != nil {
 		return "", err
 	}

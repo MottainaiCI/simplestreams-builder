@@ -74,6 +74,26 @@ func GitCheckoutPullRequest(repo *git.Repository, remote, pullrequest string) er
 	return nil
 }
 
+func GitCheckoutMergeRequest(repo *git.Repository, remote, mergeRequest string) error {
+
+	if remote == "" {
+		remote = "origin"
+	}
+
+	fetchOpts := []string{
+		"refs/merge-requests/" + mergeRequest + "/head:CI_test",
+	}
+
+	if err := GitFetch(repo, remote, fetchOpts); err != nil {
+		return err
+	}
+
+	if err := GitCheckoutCommit(repo, "CI_test"); err != nil {
+		return err
+	}
+	return nil
+}
+
 func GitFetch(r *git.Repository, remote string, args []string) error {
 	var refs []config.RefSpec
 	for _, ref := range args {

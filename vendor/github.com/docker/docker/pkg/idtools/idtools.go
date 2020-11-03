@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -203,8 +202,6 @@ func (i *IdentityMapping) GIDs() []IDMap {
 func createIDMap(subidRanges ranges) []IDMap {
 	idMap := []IDMap{}
 
-	// sort the ranges by lowest ID first
-	sort.Sort(subidRanges)
 	containerID := 0
 	for _, idrange := range subidRanges {
 		idMap = append(idMap, IDMap{
@@ -239,10 +236,6 @@ func parseSubidFile(path, username string) (ranges, error) {
 
 	s := bufio.NewScanner(subidFile)
 	for s.Scan() {
-		if err := s.Err(); err != nil {
-			return rangeList, err
-		}
-
 		text := strings.TrimSpace(s.Text())
 		if text == "" || strings.HasPrefix(text, "#") {
 			continue
@@ -263,5 +256,6 @@ func parseSubidFile(path, username string) (ranges, error) {
 			rangeList = append(rangeList, subIDRange{startid, length})
 		}
 	}
-	return rangeList, nil
+
+	return rangeList, s.Err()
 }
