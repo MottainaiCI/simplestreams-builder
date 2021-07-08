@@ -120,6 +120,11 @@ func BuildProduct(product *config.SimpleStreamsProduct, targetDir, imageFile str
 			hookScript = opts.BuildScriptHook
 		}
 
+		fmt.Println(fmt.Sprintf(
+			"Found hook %s. I will prepare the chroot for packaging.",
+			hookScript,
+		))
+
 		// Create rootfs directory
 		rootfsDir := path.Join(dateDir, "staging")
 		buildDirCommand := exec.Command("distrobuilder",
