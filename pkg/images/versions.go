@@ -35,6 +35,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -281,9 +282,24 @@ func ReadVersionsManifestJsonFromUrl(url, apiKey string) (*VersionsSSBuilderMani
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
+	var timeout int = 60
+
+	httpTimeout := os.Getenv("SSBUILDER_HTTP_TIMEOUT")
+	if httpTimeout != "" {
+		t, err := strconv.Atoi(httpTimeout)
+		if err == nil {
+			fmt.Printf("SSBUILDER_HTTP_TIMEOUT available. Using %s\n", httpTimeout)
+			timeout = t
+		} else {
+			fmt.Printf(
+				"SSBUILDER_HTTP_TIMEOUT available. Ignoring wrong value %s\n",
+				httpTimeout)
+		}
+	}
+
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   60 * time.Second,
+		Timeout:   time.Duration(timeout) * time.Second,
 	}
 
 	req, err = http.NewRequest("GET", url, nil)
