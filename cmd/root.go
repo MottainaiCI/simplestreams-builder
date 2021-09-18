@@ -1,6 +1,6 @@
 /*
 
-Copyright (C) 2019  Daniele Rondina <geaaru@sabayonlinux.org>
+Copyright (C) 2019-2021  Daniele Rondina <geaaru@sabayonlinux.org>
 Credits goes also to Gogs authors, some code portions and re-implemented design
 are also coming from the Gogs project, which is using the go-macaron framework
 and was really source of ispiration. Kudos to them!
@@ -34,11 +34,16 @@ import (
 
 const (
 	cliName = `Simplestreams Builder
-Copyright (c) 2019 Mottainai
+Copyright (c) 2019-2021 Mottainai
 
 Mottainai - LXC/LXD Simplestreams Tree Builder`
 
-	SSB_VERSION = `0.2.0-dev`
+	SSB_VERSION = `0.1.1`
+)
+
+var (
+	BuildTime   string
+	BuildCommit string
 )
 
 func initConfig(config *conf.BuilderTreeConfig) {
@@ -80,7 +85,7 @@ func Execute() {
 
 	var rootCmd = &cobra.Command{
 		Short:        cliName,
-		Version:      SSB_VERSION,
+		Version:      fmt.Sprintf("%s-g%s %s", SSB_VERSION, BuildCommit, BuildTime),
 		Args:         cobra.OnlyValidArgs,
 		SilenceUsage: true,
 		PreRun: func(cmd *cobra.Command, args []string) {
