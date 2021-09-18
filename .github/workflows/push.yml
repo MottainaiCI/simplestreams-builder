@@ -26,6 +26,6 @@ jobs:
       - name: Build test
         run: sudo -E env "PATH=$PATH" make goreleaser-snapshot
 
-      - name: Tests
-        run: |
-          sudo -E env "PATH=$PATH" make test-coverage
+      #      - name: Tests
+      #  run: |
+      #    sudo -E env "PATH=$PATH" make test-coverage
