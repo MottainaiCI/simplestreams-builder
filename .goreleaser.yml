@@ -1,0 +1,37 @@
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm
+      - arm64
+
+    goarm:
+      - 6
+      - 7
+
+    ldflags:
+      - >-
+        -s -w -X github.com/MottainaiCI/simplestreams-builder/cmd.BuildTime={{.Date}}
+        -X github.com/MottainaiCI/simplestreams-builder/cmd.BuildCommit={{.Commit}}
+
+archives:
+  - format: binary
+    name_template: simplestreams-builder-{{ .Tag }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}
+source:
+  enabled: true
+  name_template: '{{ .ProjectName }}-{{ .Tag }}-source'
+checksum:
+  name_template: '{{ .ProjectName }}-{{ .Tag }}-checksums.txt'
+snapshot:
+  name_template: "{{ .Tag }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^scripts:'
+      - '^contrib'
