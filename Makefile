@@ -66,7 +66,7 @@ vendor:
 .PHONY: goreleaser-snapshot
 goreleaser-snapshot:
 	rm -rf dist/ || true
-	goreleaser release --debug --skip-publish  --skip-validate
+	goreleaser release --debug --skip-publish  --skip-validate --snapshot
 
 .PHONY: multiarch-build
 multiarch-build:
