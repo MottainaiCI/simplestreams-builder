@@ -35,9 +35,9 @@ import (
 	images "github.com/MottainaiCI/simplestreams-builder/pkg/images"
 )
 
-func BuildIndexStruct(config *config.BuilderTreeConfig, sourceDir string) (*lxd_streams.SimpleStreamsIndex, error) {
-	var ans *lxd_streams.SimpleStreamsIndex
-	var products lxd_streams.SimpleStreamsIndexStream
+func BuildIndexStruct(config *config.BuilderTreeConfig, sourceDir string) (*lxd_streams.Stream, error) {
+	var ans *lxd_streams.Stream
+	var products lxd_streams.StreamIndex
 	var ipath, prefix, ssbPath string
 	var manifest *images.VersionsSSBuilderManifest
 	var err error
@@ -55,7 +55,7 @@ func BuildIndexStruct(config *config.BuilderTreeConfig, sourceDir string) (*lxd_
 	ipath = strings.TrimLeft(config.ImagesPath, "/")
 	prefix = strings.TrimRight(config.Prefix, "/")
 
-	products = lxd_streams.SimpleStreamsIndexStream{
+	products = lxd_streams.StreamIndex{
 		DataType: config.DataType,
 		Path: fmt.Sprintf("%s/images.json",
 			strings.TrimRight(path.Join(prefix, ipath), "/")),
@@ -116,10 +116,10 @@ func BuildIndexStruct(config *config.BuilderTreeConfig, sourceDir string) (*lxd_
 		products.Products = append(products.Products, v.Name)
 	}
 
-	ans = &lxd_streams.SimpleStreamsIndex{
+	ans = &lxd_streams.Stream{
 		// Statically use always index 1.0 format
 		Format: "index:1.0",
-		Index:  make(map[string]lxd_streams.SimpleStreamsIndexStream),
+		Index:  make(map[string]lxd_streams.StreamIndex),
 	}
 
 	ans.Index["images"] = products
@@ -127,7 +127,7 @@ func BuildIndexStruct(config *config.BuilderTreeConfig, sourceDir string) (*lxd_
 	return ans, nil
 }
 
-func WriteIndexJson(index *lxd_streams.SimpleStreamsIndex, out io.Writer) error {
+func WriteIndexJson(index *lxd_streams.Stream, out io.Writer) error {
 	enc := json.NewEncoder(out)
 	return enc.Encode(index)
 }

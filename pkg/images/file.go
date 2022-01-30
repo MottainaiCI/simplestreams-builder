@@ -34,12 +34,12 @@ import (
 	config "github.com/MottainaiCI/simplestreams-builder/pkg/config"
 )
 
-func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_streams.SimpleStreamsManifest, error) {
+func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_streams.Products, error) {
 	// NOTE: currently SimpleStreamsManifest struct doesn't contain
 	//       content_id field.
 	var ssbPath string
-	var ans *lxd_streams.SimpleStreamsManifest
-	var prodMap map[string]lxd_streams.SimpleStreamsManifestProduct
+	var ans *lxd_streams.Products
+	var prodMap map[string]lxd_streams.Product
 	var manifest *VersionsSSBuilderManifest
 	var err error
 
@@ -54,9 +54,9 @@ func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_s
 		return nil, fmt.Errorf("No products defined")
 	}
 
-	prodMap = make(map[string]lxd_streams.SimpleStreamsManifestProduct)
+	prodMap = make(map[string]lxd_streams.Product)
 
-	ans = &lxd_streams.SimpleStreamsManifest{
+	ans = &lxd_streams.Products{
 		// TODO: See what is format of updated field.
 		DataType: config.DataType,
 		Format:   config.Format,
@@ -113,7 +113,7 @@ func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_s
 			continue
 		}
 
-		prodManifest := lxd_streams.SimpleStreamsManifestProduct{
+		prodManifest := lxd_streams.Product{
 			Architecture:    v.Architecture,
 			OperatingSystem: v.OperatingSystem,
 			Release:         v.Release,
@@ -139,7 +139,7 @@ func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_s
 	return ans, nil
 }
 
-func WriteImagesJson(imgs *lxd_streams.SimpleStreamsManifest, out io.Writer) error {
+func WriteImagesJson(imgs *lxd_streams.Products, out io.Writer) error {
 	enc := json.NewEncoder(out)
 	return enc.Encode(imgs)
 }

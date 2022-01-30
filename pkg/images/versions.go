@@ -49,9 +49,9 @@ import (
 const BYTE_BUFFER_LEN = 256
 
 type VersionsSSBuilderManifest struct {
-	Name       string                                                     `json:"name"`
-	SupportEOL string                                                     `json:"expiry,omitempty"`
-	Versions   map[string]lxd_streams.SimpleStreamsManifestProductVersion `json:"versions"`
+	Name       string                                `json:"name"`
+	SupportEOL string                                `json:"expiry,omitempty"`
+	Versions   map[string]lxd_streams.ProductVersion `json:"versions"`
 }
 
 type BuildVersionsManifestOptions struct {
@@ -82,10 +82,10 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 	var err error
 	var files []os.FileInfo
 	var productBasePath, itemDir, eolDuration string
-	var item, lxdTarXzItem *lxd_streams.SimpleStreamsManifestProductVersionItem
+	var item, lxdTarXzItem *lxd_streams.ProductVersionItem
 	var ans *VersionsSSBuilderManifest = &VersionsSSBuilderManifest{
 		Name:     product.Name,
-		Versions: make(map[string]lxd_streams.SimpleStreamsManifestProductVersion),
+		Versions: make(map[string]lxd_streams.ProductVersion),
 	}
 	var combined CombinedSha256Builder
 
@@ -137,8 +137,8 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 			continue
 		}
 
-		version := lxd_streams.SimpleStreamsManifestProductVersion{
-			Items: make(map[string]lxd_streams.SimpleStreamsManifestProductVersionItem),
+		version := lxd_streams.ProductVersion{
+			Items: make(map[string]lxd_streams.ProductVersionItem),
 		}
 
 		productBasePath = path.Join(
@@ -180,9 +180,9 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 	return ans, nil
 }
 
-func checkItem(base, dir, productBasePath string, combined *CombinedSha256Builder) (*lxd_streams.SimpleStreamsManifestProductVersionItem, error) {
+func checkItem(base, dir, productBasePath string, combined *CombinedSha256Builder) (*lxd_streams.ProductVersionItem, error) {
 	var err error
-	var ans *lxd_streams.SimpleStreamsManifestProductVersionItem
+	var ans *lxd_streams.ProductVersionItem
 	var filePath string = fmt.Sprintf("%s/%s", dir, base)
 	var ftype string
 	var f os.FileInfo
@@ -214,7 +214,7 @@ func checkItem(base, dir, productBasePath string, combined *CombinedSha256Builde
 		return nil, err
 	}
 
-	ans = &lxd_streams.SimpleStreamsManifestProductVersionItem{
+	ans = &lxd_streams.ProductVersionItem{
 		Path:     fmt.Sprintf("%s/%s", productBasePath, base),
 		FileType: ftype,
 		Size:     f.Size(),
