@@ -11,11 +11,19 @@ github.com/Microsoft/hcsshim/osversion
 github.com/MottainaiCI/mottainai-server/pkg/utils
 # github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
 github.com/StackExchange/wmi
+# github.com/bketelsen/crypt v0.0.3-0.20200106085610-5cbc8cc4026c
+## explicit
 # github.com/containerd/containerd v1.3.4
 github.com/containerd/containerd/errdefs
 # github.com/containerd/continuity v0.0.0-20200413184840-d3ef23f19fbb
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/sysx
+# github.com/coreos/bbolt v1.3.2
+## explicit
+# github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
+## explicit
+# github.com/dgrijalva/jwt-go v3.2.0+incompatible
+## explicit
 # github.com/docker/distribution v2.7.1+incompatible
 github.com/docker/distribution/registry/api/errcode
 # github.com/docker/docker v17.12.0-ce-rc1.0.20200505174321-1655290016ac+incompatible
@@ -75,7 +83,12 @@ github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
 # github.com/gorilla/websocket v1.4.2
+## explicit
 github.com/gorilla/websocket
+# github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
+## explicit
+# github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
+## explicit
 # github.com/hashicorp/hcl v1.0.0
 github.com/hashicorp/hcl
 github.com/hashicorp/hcl/hcl/ast
@@ -96,6 +109,8 @@ github.com/jaypipes/ghw
 github.com/jaypipes/pcidb
 # github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99
 github.com/jbenet/go-context/io
+# github.com/jonboulle/clockwork v0.1.0
+## explicit
 # github.com/kevinburke/ssh_config v0.0.0-20190725054713-01f96b0aa0cd
 github.com/kevinburke/ssh_config
 # github.com/konsorten/go-windows-terminal-sequences v1.0.1
@@ -143,17 +158,25 @@ github.com/opencontainers/runc/libcontainer/user
 github.com/pelletier/go-toml
 # github.com/pkg/errors v0.9.1
 github.com/pkg/errors
+# github.com/prometheus/tsdb v0.7.1
+## explicit
 # github.com/sergi/go-diff v1.0.0
 github.com/sergi/go-diff/diffmatchpatch
+# github.com/shurcooL/sanitized_anchor_name v1.0.0
+## explicit
 # github.com/sirupsen/logrus v1.4.2
 github.com/sirupsen/logrus
+# github.com/smartystreets/goconvey v1.6.4
+## explicit
+# github.com/soheilhy/cmux v0.1.4
+## explicit
 # github.com/spf13/afero v1.8.0
 ## explicit
 github.com/spf13/afero
 github.com/spf13/afero/mem
 # github.com/spf13/cast v1.4.1
 github.com/spf13/cast
-# github.com/spf13/cobra v1.1.1
+# github.com/spf13/cobra v1.3.0
 ## explicit
 github.com/spf13/cobra
 # github.com/spf13/jwalterweatherman v1.1.0
@@ -175,8 +198,14 @@ github.com/src-d/gcfg/token
 github.com/src-d/gcfg/types
 # github.com/subosito/gotenv v1.2.0
 github.com/subosito/gotenv
+# github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5
+## explicit
 # github.com/xanzy/ssh-agent v0.2.1
 github.com/xanzy/ssh-agent
+# github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2
+## explicit
+# go.etcd.io/bbolt v1.3.2
+## explicit
 # golang.org/x/crypto v0.0.0-20211108221036-ceb1ce70b4fa
 golang.org/x/crypto/blowfish
 golang.org/x/crypto/cast5
@@ -258,6 +287,8 @@ gopkg.in/flosch/pongo2.v3
 # gopkg.in/ini.v1 v1.66.3
 ## explicit
 gopkg.in/ini.v1
+# gopkg.in/resty.v1 v1.12.0
+## explicit
 # gopkg.in/robfig/cron.v2 v2.0.0-20150107220207-be2e0b0deed5
 ## explicit
 gopkg.in/robfig/cron.v2
