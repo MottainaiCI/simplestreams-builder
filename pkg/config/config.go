@@ -32,18 +32,18 @@ const (
 )
 
 type SimpleStreamsProduct struct {
-	Name            string   `mapstructure:"name"`
-	Architecture    string   `mapstructure:"arch"`
-	Release         string   `mapstructure:"release"`
-	ReleaseTitle    string   `mapstructure:"release_title"`
-	OperatingSystem string   `mapstructure:"os"`
-	Directory       string   `mapstructure:"directory"`
-	Version         string   `mapstructure:"version"`
-	PrefixPath      string   `mapstructure:"prefix_path"`
-	BuildScriptHook string   `mapstructure:"build_script_hook"`
-	Aliases         []string `mapstructure:"aliases"`
-	Hidden          bool     `mapstructure:"hidden"`
-	Days            int      `mapstructure:"days"`
+	Name            string   `mapstructure:"name" json:"name" yaml:"name"`
+	Architecture    string   `mapstructure:"arch" json:"arch" yaml:"arch"`
+	Release         string   `mapstructure:"release" json:"release" yaml:"release"`
+	ReleaseTitle    string   `mapstructure:"release_title" json:"release_title" yaml:"release_title"`
+	OperatingSystem string   `mapstructure:"os" json:"os" yaml:"os"`
+	Directory       string   `mapstructure:"directory" json:"directory" yaml:"directory"`
+	Version         string   `mapstructure:"version" json:"version" yaml:"version"`
+	PrefixPath      string   `mapstructure:"prefix_path" json:"prefix_path" yaml:"prefix_path"`
+	BuildScriptHook string   `mapstructure:"build_script_hook" json:"build_script_hook,omitempty" yaml:"build_script_hook,omitempty"`
+	Aliases         []string `mapstructure:"aliases" json:"aliases" yaml:"aliases"`
+	Hidden          bool     `mapstructure:"hidden" json:"hidden,omitempty" yaml:"hidden"`
+	Days            int      `mapstructure:"days" json:"days" yaml:"days"`
 }
 
 type BuilderTreeConfig struct {
