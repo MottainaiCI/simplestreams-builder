@@ -12,10 +12,11 @@ require (
 	github.com/jaypipes/ghw v0.6.1 // indirect
 	github.com/lxc/distrobuilder v0.0.0-20190705160854-7540ba58ac15
 	github.com/lxc/lxd v0.0.0-20211001020858-71fe94be1e89
+	github.com/onsi/ginkgo/v2 v2.1.3 // indirect
 	github.com/spf13/afero v1.8.0 // indirect
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.1
-	golang.org/x/sys v0.0.0-20220128215802-99c3d69c2c27 // indirect
+	golang.org/x/sys v0.0.0-20220223155357-96fed51e1446 // indirect
 	gopkg.in/flosch/pongo2.v3 v3.0.0-20141028000813-5e81b817a0c4 // indirect
 	gopkg.in/ini.v1 v1.66.3 // indirect
 	gopkg.in/src-d/go-git.v4 v4.13.1 // indirect
