@@ -11,10 +11,11 @@ require (
 	github.com/fsouza/go-dockerclient v1.6.6 // indirect
 	github.com/jaypipes/ghw v0.6.1 // indirect
 	github.com/lxc/lxd v0.0.0-20211001020858-71fe94be1e89
-	github.com/spf13/afero v1.8.0 // indirect
+	github.com/magiconair/properties v1.8.6 // indirect
+	github.com/spf13/afero v1.8.2 // indirect
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.1
-	golang.org/x/sys v0.0.0-20220223155357-96fed51e1446 // indirect
-	gopkg.in/ini.v1 v1.66.3 // indirect
+	golang.org/x/sys v0.0.0-20220317061510-51cd9980dadf // indirect
+	gopkg.in/ini.v1 v1.66.4 // indirect
 	gopkg.in/src-d/go-git.v4 v4.13.1 // indirect
 )
