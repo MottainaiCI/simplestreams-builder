@@ -34,11 +34,11 @@ import (
 
 const (
 	cliName = `Simplestreams Builder
-Copyright (c) 2019-2021 Mottainai
+Copyright (c) 2019-2022 Mottainai
 
 Mottainai - LXC/LXD Simplestreams Tree Builder`
 
-	SSB_VERSION = `0.1.1`
+	SSB_VERSION = `0.2.0`
 )
 
 var (
