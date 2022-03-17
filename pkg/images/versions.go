@@ -1,6 +1,6 @@
 /*
 
-Copyright (C) 2019  Daniele Rondina <geaaru@sabayonlinux.org>
+Copyright (C) 2019-2022  Daniele Rondina <geaaru@sabayonlinux.org>
 Credits goes also to Gogs authors, some code portions and re-implemented design
 are also coming from the Gogs project, which is using the go-macaron framework
 and was really source of ispiration. Kudos to them!
@@ -39,7 +39,6 @@ import (
 	"strings"
 	"time"
 
-	d_shared "github.com/lxc/distrobuilder/shared"
 	lxd_streams "github.com/lxc/lxd/shared/simplestreams"
 	v "github.com/spf13/viper"
 
@@ -90,7 +89,7 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 	var combined CombinedSha256Builder
 
 	if opts.ImageFile != "" && opts.ForceExpireDuration == "" {
-		var imageDef *d_shared.Definition
+		var imageDef *Definition
 		imageDef, err = ReadImageFile(opts.ImageFile, opts.PrefixPath)
 		if err != nil {
 			fmt.Printf("Error on retrieve data from image file %s\n", opts.ImageFile)
@@ -104,7 +103,7 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 
 	if eolDuration != "" {
 		now := time.Now()
-		eol := d_shared.GetExpiryDate(now, eolDuration)
+		eol := GetExpiryDate(now, eolDuration)
 		if !now.Equal(eol) {
 			ans.SupportEOL = fmt.Sprintf("%d", eol.Unix())
 			fmt.Printf("For product %s use SupportEOL = %s (%s)\n",
@@ -357,11 +356,11 @@ func ReadVersionsManifestJson(ssbPath string) (*VersionsSSBuilderManifest, error
 	return ans, nil
 }
 
-func ReadImageFile(imageFile, prefixPath string) (*d_shared.Definition, error) {
+func ReadImageFile(imageFile, prefixPath string) (*Definition, error) {
 	var err error
 	var image string
 	var ibytes []byte
-	var ans d_shared.Definition
+	var ans Definition
 
 	if _, err = os.Stat(path.Join(prefixPath, imageFile)); os.IsNotExist(err) {
 		// Check if exists a local image file or through path defined if there is ABS.
