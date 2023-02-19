@@ -1,6 +1,6 @@
 package api
 
-// ServerEnvironment represents the read-only environment fields of a LXD server
+// ServerEnvironment represents the read-only environment fields of a LXD server.
 type ServerEnvironment struct {
 	// List of addresses the server is listening on
 	// Example: [":8443"]
@@ -63,7 +63,7 @@ type ServerEnvironment struct {
 	OSName string `json:"os_name" yaml:"os_name"`
 
 	// Version of the operating system (Linux distribution)
-	// Example: 20.04
+	// Example: 22.04
 	//
 	// API extension: api_os
 	OSVersion string `json:"os_version" yaml:"os_version"`
@@ -83,6 +83,13 @@ type ServerEnvironment struct {
 	//
 	// API extension: clustering
 	ServerClustered bool `json:"server_clustered" yaml:"server_clustered"`
+
+	// Mode that the event distribution subsystem is operating in on this server.
+	// Either "full-mesh", "hub-server" or "hub-client".
+	// Example: full-mesh
+	//
+	// API extension: event_hub
+	ServerEventMode string `json:"server_event_mode" yaml:"server_event_mode"`
 
 	// Server hostname
 	// Example: castiana
@@ -114,7 +121,7 @@ type ServerEnvironment struct {
 //
 // swagger:model
 //
-// API extension: server_supported_storage_drivers
+// API extension: server_supported_storage_drivers.
 type ServerStorageDriverInfo struct {
 	// Name of the driver
 	// Example: zfs
@@ -141,7 +148,7 @@ type ServerStorageDriverInfo struct {
 type ServerPut struct {
 	// Server configuration map (refer to doc/server.md)
 	// Example: {"core.https_address": ":8443", "core.trust_password": true}
-	Config map[string]interface{} `json:"config" yaml:"config"`
+	Config map[string]any `json:"config" yaml:"config"`
 }
 
 // ServerUntrusted represents a LXD server for an untrusted client
@@ -193,7 +200,7 @@ type Server struct {
 	Environment ServerEnvironment `json:"environment" yaml:"environment"`
 }
 
-// Writable converts a full Server struct into a ServerPut struct (filters read-only fields)
+// Writable converts a full Server struct into a ServerPut struct (filters read-only fields).
 func (srv *Server) Writable() ServerPut {
 	return srv.ServerPut
 }

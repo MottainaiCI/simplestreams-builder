@@ -1,5 +1,4 @@
 //go:build linux
-// +build linux
 
 package osarch
 
@@ -9,7 +8,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// ArchitectureGetLocal returns the local hardware architecture
+// ArchitectureGetLocal returns the local hardware architecture.
 func ArchitectureGetLocal() (string, error) {
 	uname := unix.Utsname{}
 	err := unix.Uname(&uname)

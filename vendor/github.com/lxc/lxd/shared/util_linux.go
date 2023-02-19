@@ -1,23 +1,25 @@
 //go:build linux
-// +build linux
 
 package shared
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync"
 	"sync/atomic"
-	"syscall"
 	"unsafe"
 
+	"github.com/pkg/xattr"
 	"golang.org/x/sys/unix"
 
+	"github.com/lxc/lxd/lxd/revert"
 	"github.com/lxc/lxd/shared/logger"
 	"github.com/lxc/lxd/shared/units"
 )
@@ -30,6 +32,7 @@ func GetFileStat(p string) (uid int, gid int, major uint32, minor uint32, inode 
 	if err != nil {
 		return
 	}
+
 	uid = int(stat.Uid)
 	gid = int(stat.Gid)
 	inode = uint64(stat.Ino)
@@ -42,7 +45,7 @@ func GetFileStat(p string) (uid int, gid int, major uint32, minor uint32, inode 
 	return
 }
 
-// GetPathMode returns a os.FileMode for the provided path
+// GetPathMode returns a os.FileMode for the provided path.
 func GetPathMode(path string) (os.FileMode, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -58,105 +61,35 @@ func SetSize(fd int, width int, height int) (err error) {
 	dimensions[0] = uint16(height)
 	dimensions[1] = uint16(width)
 
-	if _, _, err := unix.Syscall6(unix.SYS_IOCTL, uintptr(fd), uintptr(unix.TIOCSWINSZ), uintptr(unsafe.Pointer(&dimensions)), 0, 0, 0); err != 0 {
-		return err
+	_, _, errno := unix.Syscall6(unix.SYS_IOCTL, uintptr(fd), uintptr(unix.TIOCSWINSZ), uintptr(unsafe.Pointer(&dimensions)), 0, 0, 0)
+	if errno != 0 {
+		return errno
 	}
+
 	return nil
 }
 
-// This uses ssize_t llistxattr(const char *path, char *list, size_t size); to
-// handle symbolic links (should it in the future be possible to set extended
-// attributed on symlinks): If path is a symbolic link the extended attributes
-// associated with the link itself are retrieved.
-func llistxattr(path string, list []byte) (sz int, err error) {
-	var _p0 *byte
-	_p0, err = unix.BytePtrFromString(path)
+// GetAllXattr retrieves all extended attributes associated with a file, directory or symbolic link.
+func GetAllXattr(path string) (map[string]string, error) {
+	xattrNames, err := xattr.LList(path)
 	if err != nil {
-		return
-	}
-	var _p1 unsafe.Pointer
-	if len(list) > 0 {
-		_p1 = unsafe.Pointer(&list[0])
-	} else {
-		_p1 = unsafe.Pointer(nil)
-	}
-	r0, _, e1 := unix.Syscall(unix.SYS_LLISTXATTR, uintptr(unsafe.Pointer(_p0)), uintptr(_p1), uintptr(len(list)))
-	sz = int(r0)
-	if e1 != 0 {
-		err = e1
-	}
-	return
-}
-
-// GetAllXattr retrieves all extended attributes associated with a file,
-// directory or symbolic link.
-func GetAllXattr(path string) (xattrs map[string]string, err error) {
-	e1 := fmt.Errorf("Extended attributes changed during retrieval")
-
-	// Call llistxattr() twice: First, to determine the size of the buffer
-	// we need to allocate to store the extended attributes, second, to
-	// actually store the extended attributes in the buffer. Also, check if
-	// the size/number of extended attributes hasn't changed between the two
-	// calls.
-	pre, err := llistxattr(path, nil)
-	if err != nil || pre < 0 {
-		return nil, err
-	}
-	if pre == 0 {
-		return nil, nil
-	}
-
-	dest := make([]byte, pre)
-
-	post, err := llistxattr(path, dest)
-	if err != nil || post < 0 {
-		return nil, err
-	}
-	if post != pre {
-		return nil, e1
-	}
-
-	split := strings.Split(string(dest), "\x00")
-	if split == nil {
-		return nil, fmt.Errorf("No valid extended attribute key found")
-	}
-	// *listxattr functions return a list of  names  as  an unordered array
-	// of null-terminated character strings (attribute names are separated
-	// by null bytes ('\0')), like this: user.name1\0system.name1\0user.name2\0
-	// Since we split at the '\0'-byte the last element of the slice will be
-	// the empty string. We remove it:
-	if split[len(split)-1] == "" {
-		split = split[:len(split)-1]
-	}
-
-	xattrs = make(map[string]string, len(split))
-
-	for _, x := range split {
-		xattr := string(x)
-		// Call Getxattr() twice: First, to determine the size of the
-		// buffer we need to allocate to store the extended attributes,
-		// second, to actually store the extended attributes in the
-		// buffer. Also, check if the size of the extended attribute
-		// hasn't changed between the two calls.
-		pre, err = unix.Getxattr(path, xattr, nil)
-		if err != nil || pre < 0 {
-			return nil, err
+		// Some filesystems don't support llistxattr() for various reasons.
+		// Interpret this as a set of no xattrs, instead of an error.
+		if errors.Is(err, unix.EOPNOTSUPP) {
+			return nil, nil
 		}
 
-		dest = make([]byte, pre)
-		post := 0
-		if pre > 0 {
-			post, err = unix.Getxattr(path, xattr, dest)
-			if err != nil || post < 0 {
-				return nil, err
-			}
+		return nil, fmt.Errorf("Failed getting extended attributes from %q: %w", path, err)
+	}
+
+	var xattrs = make(map[string]string, len(xattrNames))
+	for _, xattrName := range xattrNames {
+		value, err := xattr.LGet(path, xattrName)
+		if err != nil {
+			return nil, fmt.Errorf("Failed getting %q extended attribute from %q: %w", xattrName, path, err)
 		}
 
-		if post != pre {
-			return nil, e1
-		}
-
-		xattrs[xattr] = string(dest)
+		xattrs[xattrName] = string(value)
 	}
 
 	return xattrs, nil
@@ -224,7 +157,7 @@ func GetErrno(err error) (errno error, iserrno bool) {
 	return nil, false
 }
 
-// Utsname returns the same info as unix.Utsname, as strings
+// Utsname returns the same info as unix.Utsname, as strings.
 type Utsname struct {
 	Sysname    string
 	Nodename   string
@@ -234,7 +167,7 @@ type Utsname struct {
 	Domainname string
 }
 
-// Uname returns Utsname as strings
+// Uname returns Utsname as strings.
 func Uname() (*Utsname, error) {
 	/*
 	 * Based on: https://groups.google.com/forum/#!topic/golang-nuts/Jel8Bb-YwX8
@@ -260,7 +193,7 @@ func Uname() (*Utsname, error) {
 	}, nil
 }
 
-func intArrayToString(arr interface{}) string {
+func intArrayToString(arr any) string {
 	slice := reflect.ValueOf(arr)
 	s := ""
 	for i := 0; i < slice.Len(); i++ {
@@ -289,12 +222,17 @@ func intArrayToString(arr interface{}) string {
 }
 
 func DeviceTotalMemory() (int64, error) {
+	return GetMeminfo("MemTotal")
+}
+
+func GetMeminfo(field string) (int64, error) {
 	// Open /proc/meminfo
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
 		return -1, err
 	}
-	defer f.Close()
+
+	defer func() { _ = f.Close() }()
 
 	// Read it line by line
 	scan := bufio.NewScanner(f)
@@ -302,7 +240,7 @@ func DeviceTotalMemory() (int64, error) {
 		line := scan.Text()
 
 		// We only care about MemTotal
-		if !strings.HasPrefix(line, "MemTotal:") {
+		if !strings.HasPrefix(line, field+":") {
 			continue
 		}
 
@@ -319,32 +257,30 @@ func DeviceTotalMemory() (int64, error) {
 		return valueBytes, nil
 	}
 
-	return -1, fmt.Errorf("Couldn't find MemTotal")
+	return -1, fmt.Errorf("Couldn't find %s", field)
 }
 
 // OpenPtyInDevpts creates a new PTS pair, configures them and returns them.
 func OpenPtyInDevpts(devpts_fd int, uid, gid int64) (*os.File, *os.File, error) {
-	revert := true
+	revert := revert.New()
+	defer revert.Fail()
+	var fd int
 	var ptx *os.File
 	var err error
 
 	// Create a PTS pair.
 	if devpts_fd >= 0 {
-		fd, err := unix.Openat(devpts_fd, "ptmx", os.O_RDWR|unix.O_CLOEXEC, 0)
-		if err == nil {
-			ptx = os.NewFile(uintptr(fd), "/dev/pts/ptmx")
-		}
+		fd, err = unix.Openat(devpts_fd, "ptmx", unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOCTTY, 0)
 	} else {
-		ptx, err = os.OpenFile("/dev/ptmx", os.O_RDWR|unix.O_CLOEXEC, 0)
-		if err != nil {
-			return nil, nil, err
-		}
+		fd, err = unix.Openat(-1, "/dev/ptmx", unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOCTTY, 0)
 	}
-	defer func() {
-		if revert {
-			ptx.Close()
-		}
-	}()
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ptx = os.NewFile(uintptr(fd), "/dev/pts/ptmx")
+	revert.Add(func() { _ = ptx.Close() })
 
 	// Unlock the ptx and pty.
 	val := 0
@@ -378,16 +314,12 @@ func OpenPtyInDevpts(devpts_fd int, uid, gid int64) (*os.File, *os.File, error) 
 		}
 
 		// Open the pty.
-		pty, err = os.OpenFile(fmt.Sprintf("/dev/pts/%d", id), os.O_RDWR|unix.O_NOCTTY, 0)
+		pty, err = os.OpenFile(fmt.Sprintf("/dev/pts/%d", id), unix.O_NOCTTY|unix.O_CLOEXEC|os.O_RDWR, 0)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
-	defer func() {
-		if revert {
-			pty.Close()
-		}
-	}()
+	revert.Add(func() { _ = pty.Close() })
 
 	// Configure both sides
 	for _, entry := range []*os.File{ptx, pty} {
@@ -434,7 +366,7 @@ func OpenPtyInDevpts(devpts_fd int, uid, gid int64) (*os.File, *os.File, error) 
 		return nil, nil, err
 	}
 
-	revert = false
+	revert.Success()
 	return ptx, pty, nil
 }
 
@@ -453,21 +385,16 @@ func ExecReaderToChannel(r io.Reader, bufferSize int, exited <-chan struct{}, fd
 
 	ch := make(chan ([]byte))
 
-	// Takes care that the closeChannel() function is exactly executed once.
-	// This allows us to avoid using a mutex.
-	var once sync.Once
-	closeChannel := func() {
-		close(ch)
-	}
+	channelCtx, channelCancel := context.WithCancel(context.Background())
 
 	// [1]: This function has just one job: Dealing with the case where we
 	// are running an interactive shell session where we put a process in
 	// the background that does hold stdin/stdout open, but does not
-	// generate any output at all. This case cannot be dealt with in the
+	// generate any output at all. This case cannot be dealt within the
 	// following function call. Here's why: Assume the above case, now the
 	// attached child (the shell in this example) exits. This will not
 	// generate any poll() event: We won't get POLLHUP because the
-	// background process is holding stdin/stdout open and noone is writing
+	// background process is holding stdin/stdout open and no one is writing
 	// to it. So we effectively block on GetPollRevents() in the function
 	// below. Hence, we use another go routine here who's only job is to
 	// handle that case: When we detect that the child has exited we check
@@ -479,27 +406,25 @@ func ExecReaderToChannel(r io.Reader, bufferSize int, exited <-chan struct{}, fd
 
 		atomic.StoreInt32(&attachedChildIsDead, 1)
 
+		defer channelCancel()
+
 		ret, revents, err := GetPollRevents(fd, 0, (unix.POLLIN | unix.POLLPRI | unix.POLLERR | unix.POLLHUP | unix.POLLRDHUP | unix.POLLNVAL))
 		if ret < 0 {
-			logger.Errorf("Failed to poll(POLLIN | POLLPRI | POLLHUP | POLLRDHUP) on file descriptor: %s.", err)
+			logger.Errorf("Failed to poll(POLLIN | POLLPRI | POLLHUP | POLLRDHUP) on file descriptor: %s", err)
 			// Something went wrong so let's exited otherwise we
 			// end up in an endless loop.
-			once.Do(closeChannel)
 		} else if ret > 0 {
 			if (revents & unix.POLLERR) > 0 {
-				logger.Warnf("Detected poll(POLLERR) event.")
+				logger.Warnf("Detected poll(POLLERR) event")
 				// Read end has likely been closed so again,
 				// avoid an endless loop.
-				once.Do(closeChannel)
 			} else if (revents & unix.POLLNVAL) > 0 {
-				logger.Warnf("Detected poll(POLLNVAL) event.")
-				// Well, someone closed the fd havent they? So
+				logger.Debugf("Detected poll(POLLNVAL) event")
+				// Well, someone closed the fd haven't they? So
 				// let's go home.
-				once.Do(closeChannel)
 			}
 		} else if ret == 0 {
-			logger.Debugf("No data in stdout: exiting.")
-			once.Do(closeChannel)
+			logger.Debugf("No data in stdout: exiting")
 		}
 	}()
 
@@ -509,7 +434,8 @@ func ExecReaderToChannel(r io.Reader, bufferSize int, exited <-chan struct{}, fd
 		buf := make([]byte, bufferSize)
 		avoidAtomicLoad := false
 
-		defer once.Do(closeChannel)
+		defer close(ch)
+		defer channelCancel()
 		for {
 			nr := 0
 			var err error
@@ -518,7 +444,7 @@ func ExecReaderToChannel(r io.Reader, bufferSize int, exited <-chan struct{}, fd
 			if ret < 0 {
 				// This condition is only reached in cases where we are massively f*cked since we even handle
 				// EINTR in the underlying C wrapper around poll(). So let's exit here.
-				logger.Errorf("Failed to poll(POLLIN | POLLPRI | POLLERR | POLLHUP | POLLRDHUP) on file descriptor: %s. Exiting.", err)
+				logger.Errorf("Failed to poll(POLLIN | POLLPRI | POLLERR | POLLHUP | POLLRDHUP) on file descriptor: %s. Exiting", err)
 				return
 			}
 
@@ -527,16 +453,16 @@ func ExecReaderToChannel(r io.Reader, bufferSize int, exited <-chan struct{}, fd
 			// keep on reading from the pty file descriptor until we get a simple POLLHUP back.
 			both := ((revents & (unix.POLLIN | unix.POLLPRI)) > 0) && ((revents & (unix.POLLHUP | unix.POLLRDHUP)) > 0)
 			if both {
-				logger.Debugf("Detected poll(POLLIN | POLLPRI | POLLHUP | POLLRDHUP) event.")
+				logger.Debugf("Detected poll(POLLIN | POLLPRI | POLLHUP | POLLRDHUP) event")
 				read := buf[offset : offset+readSize]
 				nr, err = r.Read(read)
 			}
 
 			if (revents & unix.POLLERR) > 0 {
-				logger.Warnf("Detected poll(POLLERR) event: exiting.")
+				logger.Warnf("Detected poll(POLLERR) event: exiting")
 				return
 			} else if (revents & unix.POLLNVAL) > 0 {
-				logger.Warnf("Detected poll(POLLNVAL) event: exiting.")
+				logger.Warnf("Detected poll(POLLNVAL) event: exiting")
 				return
 			}
 
@@ -595,10 +521,10 @@ func ExecReaderToChannel(r io.Reader, bufferSize int, exited <-chan struct{}, fd
 					//   stdout is written out.
 					ret, revents, err := GetPollRevents(fd, 0, (unix.POLLIN | unix.POLLPRI | unix.POLLERR | unix.POLLHUP | unix.POLLRDHUP | unix.POLLNVAL))
 					if ret < 0 {
-						logger.Errorf("Failed to poll(POLLIN | POLLPRI | POLLERR | POLLHUP | POLLRDHUP) on file descriptor: %s. Exiting.", err)
+						logger.Errorf("Failed to poll(POLLIN | POLLPRI | POLLERR | POLLHUP | POLLRDHUP) on file descriptor: %s. Exiting", err)
 						return
 					} else if (revents & (unix.POLLHUP | unix.POLLRDHUP | unix.POLLERR | unix.POLLNVAL)) == 0 {
-						logger.Debugf("Exiting but background processes are still running.")
+						logger.Debugf("Exiting but background processes are still running")
 						return
 					}
 				}
@@ -609,7 +535,13 @@ func ExecReaderToChannel(r io.Reader, bufferSize int, exited <-chan struct{}, fd
 			// The attached process has exited and we have read all data that may have
 			// been buffered.
 			if ((revents & (unix.POLLHUP | unix.POLLRDHUP)) > 0) && !both {
-				logger.Debugf("Detected poll(POLLHUP) event: exiting.")
+				logger.Debugf("Detected poll(POLLHUP) event: exiting")
+				return
+			}
+
+			// Check if channel is closed before potentially writing to it below.
+			if channelCtx.Err() != nil {
+				logger.Debug("Detected closed channel: exiting")
 				return
 			}
 
@@ -632,12 +564,13 @@ func GetPollRevents(fd int, timeout int, flags int) (int, int, error) {
 		Events:  int16(flags),
 		Revents: 0,
 	}
+
 	pollFds := []unix.PollFd{pollFd}
 
 again:
 	n, err := unix.Poll(pollFds, timeout)
 	if err != nil {
-		if err == syscall.EAGAIN || err == syscall.EINTR {
+		if err == unix.EAGAIN || err == unix.EINTR {
 			goto again
 		}
 
@@ -645,4 +578,30 @@ again:
 	}
 
 	return n, int(pollFds[0].Revents), err
+}
+
+// ExitStatus extracts the exit status from the error returned by exec.Cmd.
+// If a nil err is provided then an exit status of 0 is returned along with the nil error.
+// If a valid exit status can be extracted from err then it is returned along with a nil error.
+// If no valid exit status can be extracted then a -1 exit status is returned along with the err provided.
+func ExitStatus(err error) (int, error) {
+	if err == nil {
+		return 0, err // No error exit status.
+	}
+
+	var exitErr *exec.ExitError
+
+	// Detect and extract ExitError to check the embedded exit status.
+	if errors.As(err, &exitErr) {
+		// If the process was signaled, extract the signal.
+		status, isWaitStatus := exitErr.Sys().(unix.WaitStatus)
+		if isWaitStatus && status.Signaled() {
+			return 128 + int(status.Signal()), nil // 128 + n == Fatal error signal "n"
+		}
+
+		// Otherwise capture the exit status from the command.
+		return exitErr.ExitCode(), nil
+	}
+
+	return -1, err // Not able to extract an exit status.
 }

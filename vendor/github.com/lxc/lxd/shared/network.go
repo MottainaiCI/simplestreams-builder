@@ -1,14 +1,15 @@
 package shared
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -23,7 +24,7 @@ const connectErrorPrefix = "Unable to connect to"
 
 // RFC3493Dialer connects to the specified server and returns the connection.
 // If the connection cannot be established then an error with the connectErrorPrefix is returned.
-func RFC3493Dialer(network string, address string) (net.Conn, error) {
+func RFC3493Dialer(context context.Context, network string, address string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
@@ -34,21 +35,24 @@ func RFC3493Dialer(network string, address string) (net.Conn, error) {
 		return nil, err
 	}
 
+	var errs []error
 	for _, a := range addrs {
 		c, err := net.DialTimeout(network, net.JoinHostPort(a, port), 10*time.Second)
 		if err != nil {
+			errs = append(errs, err)
 			continue
 		}
 
-		if tc, ok := c.(*net.TCPConn); ok {
-			tc.SetKeepAlive(true)
-			tc.SetKeepAlivePeriod(3 * time.Second)
+		tc, ok := c.(*net.TCPConn)
+		if ok {
+			_ = tc.SetKeepAlive(true)
+			_ = tc.SetKeepAlivePeriod(3 * time.Second)
 		}
 
-		return c, err
+		return c, nil
 	}
 
-	return nil, fmt.Errorf("%s: %s", connectErrorPrefix, address)
+	return nil, fmt.Errorf("%s: %s (%v)", connectErrorPrefix, address, errs)
 }
 
 // IsConnectionError returns true if the given error is due to the dialer not being able to connect to the target
@@ -62,20 +66,16 @@ func IsConnectionError(err error) bool {
 // parameters. This is used as baseline config for both client and server
 // certificates used by LXD.
 func InitTLSConfig() *tls.Config {
-	return &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-		},
-		PreferServerCipherSuites: true,
+	config := &tls.Config{}
+
+	// Restrict to TLS 1.3 unless LXD_INSECURE_TLS is set.
+	if IsFalseOrEmpty(os.Getenv("LXD_INSECURE_TLS")) {
+		config.MinVersion = tls.VersionTLS13
+	} else {
+		config.MinVersion = tls.VersionTLS12
 	}
+
+	return config
 }
 
 func finalizeTLSConfig(tlsConfig *tls.Config, tlsRemoteCert *x509.Certificate) {
@@ -120,7 +120,7 @@ func GetTLSConfig(tlsClientCertFile string, tlsClientKeyFile string, tlsClientCA
 	}
 
 	if tlsClientCAFile != "" {
-		caCertificates, err := ioutil.ReadFile(tlsClientCAFile)
+		caCertificates, err := os.ReadFile(tlsClientCAFile)
 		if err != nil {
 			return nil, err
 		}
@@ -197,11 +197,11 @@ func WebsocketSendStream(conn *websocket.Conn, r io.Reader, bufferSize int) chan
 
 			err := conn.WriteMessage(websocket.BinaryMessage, buf)
 			if err != nil {
-				logger.Debugf("Got err writing %s", err)
+				logger.Debug("Got err writing", logger.Ctx{"err": err})
 				break
 			}
 		}
-		conn.WriteMessage(websocket.TextMessage, []byte{})
+		_ = conn.WriteMessage(websocket.TextMessage, []byte{})
 		ch <- true
 	}(conn, r)
 
@@ -215,23 +215,23 @@ func WebsocketRecvStream(w io.Writer, conn *websocket.Conn) chan bool {
 		for {
 			mt, r, err := conn.NextReader()
 			if mt == websocket.CloseMessage {
-				logger.Debugf("Got close message for reader")
+				logger.Debug("WebsocketRecvStream got close message for reader")
 				break
 			}
 
 			if mt == websocket.TextMessage {
-				logger.Debugf("Got message barrier")
+				logger.Debug("WebsocketRecvStream got message barrier")
 				break
 			}
 
 			if err != nil {
-				logger.Debugf("Got error getting next reader %s", err)
+				logger.Debug("WebsocketRecvStream got error getting next reader", logger.Ctx{"err": err})
 				break
 			}
 
-			buf, err := ioutil.ReadAll(r)
+			buf, err := io.ReadAll(r)
 			if err != nil {
-				logger.Debugf("Got error writing to writer %s", err)
+				logger.Debug("WebsocketRecvStream got error writing to writer", logger.Ctx{"err": err})
 				break
 			}
 
@@ -241,11 +241,12 @@ func WebsocketRecvStream(w io.Writer, conn *websocket.Conn) chan bool {
 
 			i, err := w.Write(buf)
 			if i != len(buf) {
-				logger.Debugf("Didn't write all of buf")
+				logger.Debug("WebsocketRecvStream didn't write all of buf")
 				break
 			}
+
 			if err != nil {
-				logger.Debugf("Error writing buf %s", err)
+				logger.Debug("WebsocketRecvStream error writing buf", logger.Ctx{"err": err})
 				break
 			}
 		}
@@ -270,7 +271,7 @@ func WebsocketProxy(source *websocket.Conn, target *websocket.Conn) chan struct{
 			}
 
 			_, err = io.Copy(w, r)
-			w.Close()
+			_ = w.Close()
 			if err != nil {
 				break
 			}
@@ -294,8 +295,8 @@ func WebsocketProxy(source *websocket.Conn, target *websocket.Conn) chan struct{
 		case <-chRecv:
 		}
 
-		source.Close()
-		target.Close()
+		_ = source.Close()
+		_ = target.Close()
 
 		close(ch)
 	}()
@@ -312,63 +313,65 @@ func defaultReader(conn *websocket.Conn, r io.ReadCloser, readDone chan<- bool) 
 	for {
 		buf, ok := <-in
 		if !ok {
-			r.Close()
-			logger.Debugf("Sending write barrier")
-			conn.WriteMessage(websocket.TextMessage, []byte{})
+			_ = r.Close()
+			logger.Debug("Sending write barrier")
+			_ = conn.WriteMessage(websocket.TextMessage, []byte{})
 			readDone <- true
 			return
 		}
 
 		err := conn.WriteMessage(websocket.BinaryMessage, buf)
 		if err != nil {
-			logger.Debugf("Got err writing %s", err)
+			logger.Debug("Got err writing", logger.Ctx{"err": err})
 			break
 		}
 	}
 	closeMsg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")
-	conn.WriteMessage(websocket.CloseMessage, closeMsg)
+	_ = conn.WriteMessage(websocket.CloseMessage, closeMsg)
 	readDone <- true
-	r.Close()
+	_ = r.Close()
 }
 
 func DefaultWriter(conn *websocket.Conn, w io.WriteCloser, writeDone chan<- bool) {
 	for {
 		mt, r, err := conn.NextReader()
 		if err != nil {
-			logger.Debugf("Got error getting next reader %s", err)
+			logger.Debug("DefaultWriter got error getting next reader", logger.Ctx{"err": err})
 			break
 		}
 
 		if mt == websocket.CloseMessage {
-			logger.Debugf("Got close message for reader")
+			logger.Debug("DefaultWriter got close message for reader")
 			break
 		}
 
 		if mt == websocket.TextMessage {
-			logger.Debugf("Got message barrier, resetting stream")
+			logger.Debug("DefaultWriter got message barrier, resetting stream")
 			break
 		}
 
-		buf, err := ioutil.ReadAll(r)
+		buf, err := io.ReadAll(r)
 		if err != nil {
-			logger.Debugf("Got error writing to writer %s", err)
+			logger.Debug("DefaultWriter got error writing to writer", logger.Ctx{"err": err})
 			break
 		}
+
 		i, err := w.Write(buf)
 		if i != len(buf) {
-			logger.Debugf("Didn't write all of buf")
+			logger.Debug("DefaultWriter didn't write all of buf")
 			break
 		}
+
 		if err != nil {
-			logger.Debugf("Error writing buf %s", err)
+			logger.Debug("DefaultWriter error writing buf", logger.Ctx{"err": err})
 			break
 		}
 	}
 	writeDone <- true
-	w.Close()
+	_ = w.Close()
 }
 
-// WebsocketIO is a wrapper implementing ReadWriteCloser on top of websocket
+// WebsocketIO is a wrapper implementing ReadWriteCloser on top of websocket.
 type WebsocketIO struct {
 	Conn   *websocket.Conn
 	reader io.Reader
@@ -376,39 +379,37 @@ type WebsocketIO struct {
 }
 
 func (w *WebsocketIO) Read(p []byte) (n int, err error) {
-	for {
-		// First read from this message
-		if w.reader == nil {
-			var mt int
+	// First read from this message
+	if w.reader == nil {
+		var mt int
 
-			mt, w.reader, err = w.Conn.NextReader()
-			if err != nil {
-				return -1, err
-			}
-
-			if mt == websocket.CloseMessage {
-				return 0, io.EOF
-			}
-
-			if mt == websocket.TextMessage {
-				return 0, io.EOF
-			}
-		}
-
-		// Perform the read itself
-		n, err := w.reader.Read(p)
-		if err == io.EOF {
-			// At the end of the message, reset reader
-			w.reader = nil
-			return n, nil
-		}
-
+		mt, w.reader, err = w.Conn.NextReader()
 		if err != nil {
-			return -1, err
+			return 0, err
 		}
 
+		if mt == websocket.CloseMessage {
+			return 0, io.EOF
+		}
+
+		if mt == websocket.TextMessage {
+			return 0, io.EOF
+		}
+	}
+
+	// Perform the read itself
+	n, err = w.reader.Read(p)
+	if err == io.EOF {
+		// At the end of the message, reset reader
+		w.reader = nil
 		return n, nil
 	}
+
+	if err != nil {
+		return 0, err
+	}
+
+	return n, nil
 }
 
 func (w *WebsocketIO) Write(p []byte) (n int, err error) {
@@ -418,14 +419,13 @@ func (w *WebsocketIO) Write(p []byte) (n int, err error) {
 	if err != nil {
 		return -1, err
 	}
-	defer wr.Close()
 
 	n, err = wr.Write(p)
 	if err != nil {
 		return -1, err
 	}
 
-	return n, nil
+	return n, wr.Close()
 }
 
 // Close sends a control message indicating the stream is finished, but it does not actually close
@@ -476,10 +476,10 @@ func WebsocketConsoleMirror(conn *websocket.Conn, w io.WriteCloser, r io.ReadClo
 		for {
 			buf, ok := <-in
 			if !ok {
-				r.Close()
+				_ = r.Close()
 				logger.Debugf("Sending write barrier")
-				conn.WriteMessage(websocket.BinaryMessage, []byte("\r"))
-				conn.WriteMessage(websocket.TextMessage, []byte{})
+				_ = conn.WriteMessage(websocket.BinaryMessage, []byte("\r"))
+				_ = conn.WriteMessage(websocket.TextMessage, []byte{})
 				readDone <- true
 				return
 			}
@@ -492,9 +492,9 @@ func WebsocketConsoleMirror(conn *websocket.Conn, w io.WriteCloser, r io.ReadClo
 		}
 
 		closeMsg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")
-		conn.WriteMessage(websocket.CloseMessage, closeMsg)
+		_ = conn.WriteMessage(websocket.CloseMessage, closeMsg)
 		readDone <- true
-		r.Close()
+		_ = r.Close()
 	}(conn, r)
 
 	return readDone, writeDone
@@ -504,7 +504,7 @@ var WebsocketUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-// AllocatePort asks the kernel for a free open port that is ready to use
+// AllocatePort asks the kernel for a free open port that is ready to use.
 func AllocatePort() (int, error) {
 	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
 	if err != nil {
@@ -515,6 +515,6 @@ func AllocatePort() (int, error) {
 	if err != nil {
 		return -1, err
 	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
+
+	return l.Addr().(*net.TCPAddr).Port, l.Close()
 }

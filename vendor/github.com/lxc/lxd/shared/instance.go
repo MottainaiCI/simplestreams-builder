@@ -3,7 +3,6 @@ package shared
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -75,7 +74,7 @@ var HugePageSizeKeys = [...]string{"limits.hugepages.64KB", "limits.hugepages.1M
 // HugePageSizeSuffix contains the list of known hugepage size suffixes.
 var HugePageSizeSuffix = [...]string{"64KB", "1MB", "2MB", "1GB"}
 
-// InstanceConfigKeysAny is a map of config key to validator. (keys applying to containers AND virtual machines)
+// InstanceConfigKeysAny is a map of config key to validator. (keys applying to containers AND virtual machines).
 var InstanceConfigKeysAny = map[string]func(value string) error{
 	"boot.autostart":             validate.Optional(validate.IsBool),
 	"boot.autostart.delay":       validate.Optional(validate.IsInt64),
@@ -83,31 +82,13 @@ var InstanceConfigKeysAny = map[string]func(value string) error{
 	"boot.stop.priority":         validate.Optional(validate.IsInt64),
 	"boot.host_shutdown_timeout": validate.Optional(validate.IsInt64),
 
-	"cluster.evacuate": validate.Optional(validate.IsOneOf("auto", "migrate", "stop")),
+	"cloud-init.network-config": validate.Optional(validate.IsYAML),
+	"cloud-init.user-data":      validate.Optional(validate.IsCloudInitUserData),
+	"cloud-init.vendor-data":    validate.Optional(validate.IsCloudInitUserData),
 
-	"limits.cpu": func(value string) error {
-		if value == "" {
-			return nil
-		}
+	"cluster.evacuate": validate.Optional(validate.IsOneOf("auto", "migrate", "live-migrate", "stop")),
 
-		// Validate the character set
-		match, _ := regexp.MatchString("^[-,0-9]*$", value)
-		if !match {
-			return fmt.Errorf("Invalid CPU limit syntax")
-		}
-
-		// Validate first character
-		if strings.HasPrefix(value, "-") || strings.HasPrefix(value, ",") {
-			return fmt.Errorf("CPU limit can't start with a separator")
-		}
-
-		// Validate last character
-		if strings.HasSuffix(value, "-") || strings.HasSuffix(value, ",") {
-			return fmt.Errorf("CPU limit can't end with a separator")
-		}
-
-		return nil
-	},
+	"limits.cpu":           validate.Optional(validate.IsValidCPUSet),
 	"limits.disk.priority": validate.Optional(validate.IsPriority),
 	"limits.memory": func(value string) error {
 		if value == "" {
@@ -146,30 +127,35 @@ var InstanceConfigKeysAny = map[string]func(value string) error{
 	"security.devlxd":            validate.Optional(validate.IsBool),
 	"security.protection.delete": validate.Optional(validate.IsBool),
 
-	"snapshots.schedule":         validate.Optional(validate.IsCron([]string{"@hourly", "@daily", "@midnight", "@weekly", "@monthly", "@annually", "@yearly", "@startup"})),
+	"snapshots.schedule":         validate.Optional(validate.IsCron([]string{"@hourly", "@daily", "@midnight", "@weekly", "@monthly", "@annually", "@yearly", "@startup", "@never"})),
 	"snapshots.schedule.stopped": validate.Optional(validate.IsBool),
 	"snapshots.pattern":          validate.IsAny,
 	"snapshots.expiry": func(value string) error {
 		// Validate expression
-		_, err := GetSnapshotExpiry(time.Time{}, value)
+		_, err := GetExpiry(time.Time{}, value)
 		return err
 	},
 
 	// Volatile keys.
-	"volatile.apply_template":   validate.IsAny,
-	"volatile.base_image":       validate.IsAny,
-	"volatile.evacuate.origin":  validate.IsAny,
-	"volatile.last_state.idmap": validate.IsAny,
-	"volatile.last_state.power": validate.IsAny,
-	"volatile.idmap.base":       validate.IsAny,
-	"volatile.idmap.current":    validate.IsAny,
-	"volatile.idmap.next":       validate.IsAny,
-	"volatile.apply_quota":      validate.IsAny,
-	"volatile.uuid":             validate.Optional(validate.IsUUID),
-	"volatile.vsock_id":         validate.Optional(validate.IsInt64),
+	"volatile.apply_template":         validate.IsAny,
+	"volatile.base_image":             validate.IsAny,
+	"volatile.cloud-init.instance-id": validate.Optional(validate.IsUUID),
+	"volatile.evacuate.origin":        validate.IsAny,
+	"volatile.last_state.idmap":       validate.IsAny,
+	"volatile.last_state.power":       validate.IsAny,
+	"volatile.last_state.ready":       validate.IsBool,
+	"volatile.idmap.base":             validate.IsAny,
+	"volatile.idmap.current":          validate.IsAny,
+	"volatile.idmap.next":             validate.IsAny,
+	"volatile.apply_quota":            validate.IsAny,
+	"volatile.uuid":                   validate.Optional(validate.IsUUID),
+	"volatile.vsock_id":               validate.Optional(validate.IsInt64),
+
+	// Caller is responsible for full validation of any raw.* value.
+	"raw.idmap": validate.IsAny,
 }
 
-// InstanceConfigKeysContainer is a map of config key to validator. (keys applying to containers only)
+// InstanceConfigKeysContainer is a map of config key to validator. (keys applying to containers only).
 var InstanceConfigKeysContainer = map[string]func(value string) error{
 	"limits.cpu.allowance": func(value string) error {
 		if value == "" {
@@ -227,7 +213,6 @@ var InstanceConfigKeysContainer = map[string]func(value string) error{
 	"nvidia.require.driver":      validate.IsAny,
 
 	// Caller is responsible for full validation of any raw.* value.
-	"raw.idmap":   validate.IsAny,
 	"raw.lxc":     validate.IsAny,
 	"raw.seccomp": validate.IsAny,
 
@@ -241,34 +226,42 @@ var InstanceConfigKeysContainer = map[string]func(value string) error{
 	"security.privileged":       validate.Optional(validate.IsBool),
 	"security.protection.shift": validate.Optional(validate.IsBool),
 
-	"security.syscalls.allow":                   validate.IsAny,
-	"security.syscalls.blacklist_default":       validate.Optional(validate.IsBool),
-	"security.syscalls.blacklist_compat":        validate.Optional(validate.IsBool),
-	"security.syscalls.blacklist":               validate.IsAny,
-	"security.syscalls.deny_default":            validate.Optional(validate.IsBool),
-	"security.syscalls.deny_compat":             validate.Optional(validate.IsBool),
-	"security.syscalls.deny":                    validate.IsAny,
-	"security.syscalls.intercept.bpf":           validate.Optional(validate.IsBool),
-	"security.syscalls.intercept.bpf.devices":   validate.Optional(validate.IsBool),
-	"security.syscalls.intercept.mknod":         validate.Optional(validate.IsBool),
-	"security.syscalls.intercept.mount":         validate.Optional(validate.IsBool),
-	"security.syscalls.intercept.mount.allowed": validate.IsAny,
-	"security.syscalls.intercept.mount.fuse":    validate.IsAny,
-	"security.syscalls.intercept.mount.shift":   validate.Optional(validate.IsBool),
-	"security.syscalls.intercept.setxattr":      validate.Optional(validate.IsBool),
-	"security.syscalls.whitelist":               validate.IsAny,
+	"security.syscalls.allow":                        validate.IsAny,
+	"security.syscalls.blacklist_default":            validate.Optional(validate.IsBool),
+	"security.syscalls.blacklist_compat":             validate.Optional(validate.IsBool),
+	"security.syscalls.blacklist":                    validate.IsAny,
+	"security.syscalls.deny_default":                 validate.Optional(validate.IsBool),
+	"security.syscalls.deny_compat":                  validate.Optional(validate.IsBool),
+	"security.syscalls.deny":                         validate.IsAny,
+	"security.syscalls.intercept.bpf":                validate.Optional(validate.IsBool),
+	"security.syscalls.intercept.bpf.devices":        validate.Optional(validate.IsBool),
+	"security.syscalls.intercept.mknod":              validate.Optional(validate.IsBool),
+	"security.syscalls.intercept.mount":              validate.Optional(validate.IsBool),
+	"security.syscalls.intercept.mount.allowed":      validate.IsAny,
+	"security.syscalls.intercept.mount.fuse":         validate.IsAny,
+	"security.syscalls.intercept.mount.shift":        validate.Optional(validate.IsBool),
+	"security.syscalls.intercept.sched_setscheduler": validate.Optional(validate.IsBool),
+	"security.syscalls.intercept.setxattr":           validate.Optional(validate.IsBool),
+	"security.syscalls.intercept.sysinfo":            validate.Optional(validate.IsBool),
+	"security.syscalls.whitelist":                    validate.IsAny,
 }
 
-// InstanceConfigKeysVM is a map of config key to validator. (keys applying to VM only)
+// InstanceConfigKeysVM is a map of config key to validator. (keys applying to VM only).
 var InstanceConfigKeysVM = map[string]func(value string) error{
 	"limits.memory.hugepages": validate.Optional(validate.IsBool),
 
 	"migration.stateful": validate.Optional(validate.IsBool),
 
 	// Caller is responsible for full validation of any raw.* value.
-	"raw.qemu": validate.IsAny,
+	"raw.qemu":      validate.IsAny,
+	"raw.qemu.conf": validate.IsAny,
 
-	"security.secureboot": validate.Optional(validate.IsBool),
+	"security.agent.metrics": validate.Optional(validate.IsBool),
+	"security.secureboot":    validate.Optional(validate.IsBool),
+
+	"agent.nic_config": validate.Optional(validate.IsBool),
+
+	"volatile.apply_nvram": validate.Optional(validate.IsBool),
 }
 
 // ConfigKeyChecker returns a function that will check whether or not
@@ -278,18 +271,21 @@ var InstanceConfigKeysVM = map[string]func(value string) error{
 // be done by the caller.  User defined keys are always considered to
 // be valid, e.g. user.* and environment.* keys.
 func ConfigKeyChecker(key string, instanceType instancetype.Type) (func(value string) error, error) {
-	if f, ok := InstanceConfigKeysAny[key]; ok {
+	f, ok := InstanceConfigKeysAny[key]
+	if ok {
 		return f, nil
 	}
 
 	if instanceType == instancetype.Any || instanceType == instancetype.Container {
-		if f, ok := InstanceConfigKeysContainer[key]; ok {
+		f, ok := InstanceConfigKeysContainer[key]
+		if ok {
 			return f, nil
 		}
 	}
 
 	if instanceType == instancetype.Any || instanceType == instancetype.VM {
-		if f, ok := InstanceConfigKeysVM[key]; ok {
+		f, ok := InstanceConfigKeysVM[key]
+		if ok {
 			return f, nil
 		}
 	}
@@ -327,6 +323,10 @@ func ConfigKeyChecker(key string, instanceType instancetype.Type) (func(value st
 			return validate.IsAny, nil
 		}
 
+		if strings.HasSuffix(key, ".last_state.vf.parent") {
+			return validate.IsAny, nil
+		}
+
 		if strings.HasSuffix(key, ".apply_quota") {
 			return validate.IsAny, nil
 		}
@@ -341,6 +341,10 @@ func ConfigKeyChecker(key string, instanceType instancetype.Type) (func(value st
 
 		if strings.HasSuffix(key, ".uuid") {
 			return validate.IsAny, nil
+		}
+
+		if strings.HasSuffix(key, ".last_state.ready") {
+			return validate.IsBool, nil
 		}
 	}
 
@@ -361,18 +365,12 @@ func ConfigKeyChecker(key string, instanceType instancetype.Type) (func(value st
 		return validate.IsAny, nil
 	}
 
-	return nil, fmt.Errorf("Unknown configuration key: %s", key)
-}
-
-// InstanceGetParentAndSnapshotName returns the parent instance name, snapshot name,
-// and whether it actually was a snapshot name.
-func InstanceGetParentAndSnapshotName(name string) (string, string, bool) {
-	fields := strings.SplitN(name, SnapshotDelimiter, 2)
-	if len(fields) == 1 {
-		return name, "", false
+	if (instanceType == instancetype.Any || instanceType == instancetype.Container) &&
+		strings.HasPrefix(key, "linux.sysctl.") {
+		return validate.IsAny, nil
 	}
 
-	return fields[0], fields[1], true
+	return nil, fmt.Errorf("Unknown configuration key: %s", key)
 }
 
 // InstanceIncludeWhenCopying is used to decide whether to include a config item or not when copying an instance.

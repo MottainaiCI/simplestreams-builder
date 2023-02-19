@@ -1,11 +1,10 @@
 //go:build !windows
-// +build !windows
 
 package shared
 
 import (
 	"crypto/x509"
-	"io/ioutil"
+	"os"
 )
 
 func systemCertPool() (*x509.CertPool, error) {
@@ -17,7 +16,7 @@ func systemCertPool() (*x509.CertPool, error) {
 
 	// Attempt to load the system's pool too (for snaps)
 	if PathExists("/var/lib/snapd/hostfs/etc/ssl/certs/ca-certificates.crt") {
-		snapCerts, err := ioutil.ReadFile("/var/lib/snapd/hostfs/etc/ssl/certs/ca-certificates.crt")
+		snapCerts, err := os.ReadFile("/var/lib/snapd/hostfs/etc/ssl/certs/ca-certificates.crt")
 		if err == nil {
 			pool.AppendCertsFromPEM(snapCerts)
 		}

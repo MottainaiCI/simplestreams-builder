@@ -315,4 +315,40 @@ enum {
 #define hweight32(w) __const_hweight32(w)
 #define hweight64(w) __const_hweight64(w)
 
+/*
+ * /proc/           = 6
+ *                  +
+ * <pid-as_str>     = INTTYPE_TO_STRLEN(pid_t)
+ *                  +
+ * /.id_map         = 8
+ *                  +
+ * \0               = 1
+ */
+#define PROC_PID_IDMAP_LEN (6 + INTTYPE_TO_STRLEN(pid_t) + 8 + 1)
+
+#define strnprintf(buf, buf_size, ...)                                                    \
+	({                                                                                \
+		int __ret_strnprintf;                                                     \
+		__ret_strnprintf = snprintf(buf, buf_size, ##__VA_ARGS__);                \
+		if (__ret_strnprintf < 0 || (size_t)__ret_strnprintf >= (size_t)buf_size) \
+			__ret_strnprintf = ret_errno(EIO);				  \
+		__ret_strnprintf;                                                         \
+	})
+
+#define STRINGIFY(a) __STRINGIFY(a)
+#define __STRINGIFY(a) #a
+
+#define log_stderr(format, ...)                                               \
+	fprintf(stderr, "%s: %d: %s - %m - " format "\n", __FILE__, __LINE__, \
+		__func__, ##__VA_ARGS__)
+
+#define die_errno(__errno__, format, ...)          \
+	({                                         \
+		errno = (__errno__);               \
+		log_stderr(format, ##__VA_ARGS__); \
+		_exit(EXIT_FAILURE);               \
+	})
+
+#define die(format, ...) die_errno(errno, format, ##__VA_ARGS__)
+
 #endif /* __LXC_MACRO_H */

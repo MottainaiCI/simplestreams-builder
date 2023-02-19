@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+// LXD event types.
+const (
+	EventTypeLifecycle = "lifecycle"
+	EventTypeLogging   = "logging"
+	EventTypeOperation = "operation"
+)
+
 // Event represents an event entry (over websocket)
 //
 // swagger:model
@@ -27,18 +34,24 @@ type Event struct {
 	//
 	// API extension: event_location
 	Location string `yaml:"location,omitempty" json:"location,omitempty"`
+
+	// Project the event belongs to.
+	// Example: default
+	//
+	// API extension: event_project
+	Project string `yaml:"project,omitempty" json:"project,omitempty"`
 }
 
-// ToLogging creates log record for the event
+// ToLogging creates log record for the event.
 func (event *Event) ToLogging() (EventLogRecord, error) {
-	if event.Type == "logging" {
+	if event.Type == EventTypeLogging {
 		e := &EventLogging{}
 		err := json.Unmarshal(event.Metadata, &e)
 		if err != nil {
 			return EventLogRecord{}, err
 		}
 
-		ctx := []interface{}{}
+		ctx := []any{}
 		for k, v := range e.Context {
 			ctx = append(ctx, k)
 			ctx = append(ctx, v)
@@ -50,15 +63,16 @@ func (event *Event) ToLogging() (EventLogRecord, error) {
 			Msg:  e.Message,
 			Ctx:  ctx,
 		}
+
 		return record, nil
-	} else if event.Type == "lifecycle" {
+	} else if event.Type == EventTypeLifecycle {
 		e := &EventLifecycle{}
 		err := json.Unmarshal(event.Metadata, &e)
 		if err != nil {
 			return EventLogRecord{}, err
 		}
 
-		ctx := []interface{}{}
+		ctx := []any{}
 		for k, v := range e.Context {
 			ctx = append(ctx, k)
 			ctx = append(ctx, v)
@@ -78,7 +92,7 @@ func (event *Event) ToLogging() (EventLogRecord, error) {
 		}
 
 		return record, nil
-	} else if event.Type == "operation" {
+	} else if event.Type == EventTypeOperation {
 		e := &Operation{}
 		err := json.Unmarshal(event.Metadata, &e)
 		if err != nil {
@@ -89,7 +103,7 @@ func (event *Event) ToLogging() (EventLogRecord, error) {
 			Time: event.Timestamp,
 			Lvl:  "info",
 			Msg:  fmt.Sprintf("ID: %s, Class: %s, Description: %s", e.ID, e.Class, e.Description),
-			Ctx: []interface{}{
+			Ctx: []any{
 				"CreatedAt", e.CreatedAt,
 				"UpdatedAt", e.UpdatedAt,
 				"Status", e.Status,
@@ -101,21 +115,22 @@ func (event *Event) ToLogging() (EventLogRecord, error) {
 				"Location", e.Location,
 			},
 		}
+
 		return record, nil
 	}
 
 	return EventLogRecord{}, fmt.Errorf("Not supported event type: %s", event.Type)
 }
 
-// EventLogRecord represents single log record
+// EventLogRecord represents single log record.
 type EventLogRecord struct {
 	Time time.Time
 	Lvl  string
 	Msg  string
-	Ctx  []interface{}
+	Ctx  []any
 }
 
-// EventLogging represents a logging type event entry (admin only)
+// EventLogging represents a logging type event entry (admin only).
 type EventLogging struct {
 	Message string            `yaml:"message" json:"message"`
 	Level   string            `yaml:"level" json:"level"`
@@ -124,11 +139,11 @@ type EventLogging struct {
 
 // EventLifecycle represets a lifecycle type event entry
 //
-// API extension: event_lifecycle
+// API extension: event_lifecycle.
 type EventLifecycle struct {
-	Action  string                 `yaml:"action" json:"action"`
-	Source  string                 `yaml:"source" json:"source"`
-	Context map[string]interface{} `yaml:"context,omitempty" json:"context,omitempty"`
+	Action  string         `yaml:"action" json:"action"`
+	Source  string         `yaml:"source" json:"source"`
+	Context map[string]any `yaml:"context,omitempty" json:"context,omitempty"`
 
 	// API extension: event_lifecycle_requestor
 	Requestor *EventLifecycleRequestor `yaml:"requestor,omitempty" json:"requestor,omitempty"`
@@ -136,7 +151,7 @@ type EventLifecycle struct {
 
 // EventLifecycleRequestor represents the initial requestor for an event
 //
-// API extension: event_lifecycle_requestor
+// API extension: event_lifecycle_requestor.
 type EventLifecycleRequestor struct {
 	Username string `yaml:"username" json:"username"`
 	Protocol string `yaml:"protocol" json:"protocol"`

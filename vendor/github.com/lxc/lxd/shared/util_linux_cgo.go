@@ -1,5 +1,4 @@
 //go:build linux && cgo
-// +build linux,cgo
 
 package shared
 
@@ -7,10 +6,9 @@ import (
 	"fmt"
 	"os"
 
-	// Used by cgo
-	_ "github.com/lxc/lxd/lxd/include"
-
 	"golang.org/x/sys/unix"
+
+	_ "github.com/lxc/lxd/lxd/include" // Used by cgo
 )
 
 /*
@@ -34,6 +32,7 @@ import (
 #include <sys/un.h>
 
 #include "../lxd/include/process_utils.h"
+#include "../lxd/include/syscall_wrappers.h"
 
 #define ABSTRACT_UNIX_SOCK_LEN sizeof(((struct sockaddr_un *)0)->sun_path)
 
@@ -74,11 +73,12 @@ func unCloexec(fd int) error {
 	if errno != 0 {
 		err = errno
 	}
+
 	return err
 }
 
 func PidFdOpen(Pid int, Flags uint32) (*os.File, error) {
-	pidFd, errno := C.pidfd_open(C.int(Pid), C.uint32_t(Flags))
+	pidFd, errno := C.lxd_pidfd_open(C.int(Pid), C.uint32_t(Flags))
 	if errno != nil {
 		return nil, errno
 	}
@@ -92,9 +92,23 @@ func PidFdOpen(Pid int, Flags uint32) (*os.File, error) {
 }
 
 func PidfdSendSignal(Pidfd int, Signal int, Flags uint32) error {
-	ret, errno := C.pidfd_send_signal(C.int(Pidfd), C.int(Signal), nil, C.uint32_t(Flags))
+	ret, errno := C.lxd_pidfd_send_signal(C.int(Pidfd), C.int(Signal), nil, C.uint32_t(Flags))
 	if ret != 0 {
 		return errno
+	}
+
+	return nil
+}
+
+const CLOSE_RANGE_UNSHARE uint32 = C.CLOSE_RANGE_UNSHARE
+const CLOSE_RANGE_CLOEXEC uint32 = C.CLOSE_RANGE_CLOEXEC
+
+func CloseRange(FirstFd uint32, LastFd uint32, Flags uint32) error {
+	ret, errno := C.lxd_close_range(C.uint32_t(FirstFd), C.uint32_t(LastFd), C.uint32_t(Flags))
+	if ret != 0 {
+		if errno != unix.ENOSYS && errno != unix.EINVAL {
+			return errno
+		}
 	}
 
 	return nil

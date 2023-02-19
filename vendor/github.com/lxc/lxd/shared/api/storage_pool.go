@@ -12,11 +12,14 @@ const StoragePoolStatusErrored = "Errored"
 // StoragePoolStatusUnknown storage pool is in unknown status.
 const StoragePoolStatusUnknown = "Unknown"
 
+// StoragePoolStatusUnvailable storage pool failed to initialize.
+const StoragePoolStatusUnvailable = "Unavailable"
+
 // StoragePoolsPost represents the fields of a new LXD storage pool
 //
 // swagger:model
 //
-// API extension: storage
+// API extension: storage.
 type StoragePoolsPost struct {
 	StoragePoolPut `yaml:",inline"`
 
@@ -33,7 +36,7 @@ type StoragePoolsPost struct {
 //
 // swagger:model
 //
-// API extension: storage
+// API extension: storage.
 type StoragePool struct {
 	StoragePoolPut `yaml:",inline"`
 
@@ -68,7 +71,7 @@ type StoragePool struct {
 //
 // swagger:model
 //
-// API extension: storage
+// API extension: storage.
 type StoragePoolPut struct {
 	// Storage pool configuration map (refer to doc/storage.md)
 	// Example: {"volume.block.filesystem": "ext4", "volume.size": "50GiB"}
@@ -85,4 +88,13 @@ type StoragePoolPut struct {
 // (filters read-only fields).
 func (storagePool *StoragePool) Writable() StoragePoolPut {
 	return storagePool.StoragePoolPut
+}
+
+// StoragePoolState represents the state of a storage pool.
+//
+// swagger:model
+//
+// API extension: cluster_member_state.
+type StoragePoolState struct {
+	ResourcesStoragePool `yaml:",inline"`
 }
