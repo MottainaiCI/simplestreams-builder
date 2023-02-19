@@ -1,6 +1,5 @@
 /*
-
-Copyright (C) 2019-2021  Daniele Rondina <geaaru@sabayonlinux.org>
+Copyright (C) 2019-2023  Daniele Rondina <geaaru@funtoo.org>
 Credits goes also to Gogs authors, some code portions and re-implemented design
 are also coming from the Gogs project, which is using the go-macaron framework
 and was really source of ispiration. Kudos to them!
@@ -17,7 +16,6 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
-
 */
 package cmd
 
@@ -34,11 +32,11 @@ import (
 
 const (
 	cliName = `Simplestreams Builder
-Copyright (c) 2019-2022 Mottainai
+Copyright (c) 2019-2023 Mottainai
 
 Mottainai - LXC/LXD Simplestreams Tree Builder`
 
-	SSB_VERSION = `0.2.0`
+	SSB_VERSION = `0.2.1`
 )
 
 var (
