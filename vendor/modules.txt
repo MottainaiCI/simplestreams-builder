@@ -247,6 +247,8 @@ github.com/go-ole/go-ole/oleutil
 ## explicit; go 1.11
 # github.com/go-redis/redis/v8 v8.11.5
 ## explicit; go 1.17
+# github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0
+## explicit; go 1.13
 # github.com/gobwas/glob v0.2.3
 ## explicit
 # github.com/gofrs/uuid v4.0.0+incompatible
@@ -269,6 +271,8 @@ github.com/golang/groupcache/lru
 ## explicit
 # github.com/google/gofuzz v1.2.0
 ## explicit; go 1.12
+# github.com/google/pprof v0.0.0-20220520215854-d04f2422c8a1
+## explicit; go 1.17
 # github.com/google/uuid v1.3.0
 ## explicit
 github.com/google/uuid
@@ -408,6 +412,8 @@ github.com/morikuni/aec
 ## explicit
 # github.com/olekukonko/tablewriter v0.0.5
 ## explicit; go 1.12
+# github.com/onsi/ginkgo/v2 v2.8.3
+## explicit; go 1.18
 # github.com/opencontainers/go-digest v1.0.0
 ## explicit; go 1.13
 github.com/opencontainers/go-digest
@@ -558,6 +564,8 @@ golang.org/x/text/transform
 golang.org/x/text/unicode/norm
 # golang.org/x/time v0.1.0
 ## explicit
+# golang.org/x/tools v0.6.0
+## explicit; go 1.18
 # google.golang.org/appengine v1.6.7
 ## explicit; go 1.11
 # google.golang.org/protobuf v1.28.1
