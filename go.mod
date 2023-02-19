@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/MottainaiCI/mottainai-server v0.1.2
 	github.com/lxc/lxd v0.0.0-20211001020858-71fe94be1e89
-	github.com/spf13/cobra v1.4.0
+	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.15.0
 )
 
@@ -31,7 +31,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
-	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jaypipes/ghw v0.6.1 // indirect
 	github.com/jaypipes/pcidb v0.6.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
