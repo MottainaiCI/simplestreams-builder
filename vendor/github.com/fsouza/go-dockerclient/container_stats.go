@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,6 +55,30 @@ type Stats struct {
 			TotalPgpgin             uint64 `json:"total_pgpgin,omitempty" yaml:"total_pgpgin,omitempty" toml:"total_pgpgin,omitempty"`
 			HierarchicalMemswLimit  uint64 `json:"hierarchical_memsw_limit,omitempty" yaml:"hierarchical_memsw_limit,omitempty" toml:"hierarchical_memsw_limit,omitempty"`
 			Swap                    uint64 `json:"swap,omitempty" yaml:"swap,omitempty" toml:"swap,omitempty"`
+			Anon                    uint64 `json:"anon,omitempty" yaml:"anon,omitempty" toml:"anon,omitempty"`
+			AnonThp                 uint64 `json:"anon_thp,omitempty" yaml:"anon_thp,omitempty" toml:"anon_thp,omitempty"`
+			File                    uint64 `json:"file,omitempty" yaml:"file,omitempty" toml:"file,omitempty"`
+			FileDirty               uint64 `json:"file_dirty,omitempty" yaml:"file_dirty,omitempty" toml:"file_dirty,omitempty"`
+			FileMapped              uint64 `json:"file_mapped,omitempty" yaml:"file_mapped,omitempty" toml:"file_mapped,omitempty"`
+			FileWriteback           uint64 `json:"file_writeback,omitempty" yaml:"file_writeback,omitempty" toml:"file_writeback,omitempty"`
+			KernelStack             uint64 `json:"kernel_stack,omitempty" yaml:"kernel_stack,omitempty" toml:"kernel_stack,omitempty"`
+			Pgactivate              uint64 `json:"pgactivate,omitempty" yaml:"pgactivate,omitempty" toml:"pgactivate,omitempty"`
+			Pgdeactivate            uint64 `json:"pgdeactivate,omitempty" yaml:"pgdeactivate,omitempty" toml:"pgdeactivate,omitempty"`
+			Pglazyfree              uint64 `json:"pglazyfree,omitempty" yaml:"pglazyfree,omitempty" toml:"pglazyfree,omitempty"`
+			Pglazyfreed             uint64 `json:"pglazyfreed,omitempty" yaml:"pglazyfreed,omitempty" toml:"pglazyfreed,omitempty"`
+			Pgrefill                uint64 `json:"pgrefill,omitempty" yaml:"pgrefill,omitempty" toml:"pgrefill,omitempty"`
+			Pgscan                  uint64 `json:"pgscan,omitempty" yaml:"pgscan,omitempty" toml:"pgscan,omitempty"`
+			Pgsteal                 uint64 `json:"pgsteal,omitempty" yaml:"pgsteal,omitempty" toml:"pgsteal,omitempty"`
+			Shmem                   uint64 `json:"shmem,omitempty" yaml:"shmem,omitempty" toml:"shmem,omitempty"`
+			Slab                    uint64 `json:"slab,omitempty" yaml:"slab,omitempty" toml:"slab,omitempty"`
+			SlabReclaimable         uint64 `json:"slab_reclaimable,omitempty" yaml:"slab_reclaimable,omitempty" toml:"slab_reclaimable,omitempty"`
+			SlabUnreclaimable       uint64 `json:"slab_unreclaimable,omitempty" yaml:"slab_unreclaimable,omitempty" toml:"slab_unreclaimable,omitempty"`
+			Sock                    uint64 `json:"sock,omitempty" yaml:"sock,omitempty" toml:"sock,omitempty"`
+			ThpCollapseAlloc        uint64 `json:"thp_collapse_alloc,omitempty" yaml:"thp_collapse_alloc,omitempty" toml:"thp_collapse_alloc,omitempty"`
+			ThpFaultAlloc           uint64 `json:"thp_fault_alloc,omitempty" yaml:"thp_fault_alloc,omitempty" toml:"thp_fault_alloc,omitempty"`
+			WorkingsetActivate      uint64 `json:"workingset_activate,omitempty" yaml:"workingset_activate,omitempty" toml:"workingset_activate,omitempty"`
+			WorkingsetNodereclaim   uint64 `json:"workingset_nodereclaim,omitempty" yaml:"workingset_nodereclaim,omitempty" toml:"workingset_nodereclaim,omitempty"`
+			WorkingsetRefault       uint64 `json:"workingset_refault,omitempty" yaml:"workingset_refault,omitempty" toml:"workingset_refault,omitempty"`
 		} `json:"stats,omitempty" yaml:"stats,omitempty" toml:"stats,omitempty"`
 		MaxUsage          uint64 `json:"max_usage,omitempty" yaml:"max_usage,omitempty" toml:"max_usage,omitempty"`
 		Usage             uint64 `json:"usage,omitempty" yaml:"usage,omitempty" toml:"usage,omitempty"`
@@ -175,8 +200,8 @@ func (c *Client) Stats(opts StatsOptions) (retErr error) {
 			reqSent:           reqSent,
 		})
 		if err != nil {
-			dockerError, ok := err.(*Error)
-			if ok {
+			var dockerError *Error
+			if errors.As(err, &dockerError) {
 				if dockerError.Status == http.StatusNotFound {
 					err = &NoSuchContainer{ID: opts.ID}
 				}
@@ -203,7 +228,7 @@ func (c *Client) Stats(opts StatsOptions) (retErr error) {
 	decoder := json.NewDecoder(readCloser)
 	stats := new(Stats)
 	<-reqSent
-	for err := decoder.Decode(stats); err != io.EOF; err = decoder.Decode(stats) {
+	for err := decoder.Decode(stats); !errors.Is(err, io.EOF); err = decoder.Decode(stats) {
 		if err != nil {
 			return err
 		}
