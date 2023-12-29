@@ -3,7 +3,7 @@
 override LDFLAGS += -X "github.com/MottainaiCI/simplestreams-builder/cmd.BuildTime=$(shell date -u '+%Y-%m-%d %I:%M:%S %Z')"
 override LDFLAGS += -X "github.com/MottainaiCI/simplestreams-builder/cmd.BuildCommit=$(shell git rev-parse HEAD)"
 
-NAME ?= lxd-compose
+NAME ?= simplestreams-builder
 PACKAGE_NAME ?= $(NAME)
 REVISION := $(shell git rev-parse --short HEAD || echo dev)
 VERSION := $(shell git describe --tags || echo $(REVISION))
