@@ -1,5 +1,4 @@
 /*
-
 Copyright (C) 2019-2022  Daniele Rondina <geaaru@sabayonlinux.org>
 Credits goes also to Gogs authors, some code portions and re-implemented design
 are also coming from the Gogs project, which is using the go-macaron framework
@@ -17,7 +16,6 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
-
 */
 package images
 
@@ -39,18 +37,18 @@ import (
 	"strings"
 	"time"
 
-	lxd_streams "github.com/lxc/lxd/shared/simplestreams"
 	v "github.com/spf13/viper"
 
 	config "github.com/MottainaiCI/simplestreams-builder/pkg/config"
+	streams "github.com/MottainaiCI/simplestreams-builder/pkg/simplestreams"
 )
 
 const BYTE_BUFFER_LEN = 256
 
 type VersionsSSBuilderManifest struct {
-	Name       string                                `json:"name"`
-	SupportEOL string                                `json:"expiry,omitempty"`
-	Versions   map[string]lxd_streams.ProductVersion `json:"versions"`
+	Name       string                            `json:"name"`
+	SupportEOL string                            `json:"expiry,omitempty"`
+	Versions   map[string]streams.ProductVersion `json:"versions"`
 }
 
 type BuildVersionsManifestOptions struct {
@@ -81,10 +79,10 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 	var err error
 	var files []os.FileInfo
 	var productBasePath, itemDir, eolDuration string
-	var item, lxdTarXzItem *lxd_streams.ProductVersionItem
+	var item, lxdTarXzItem *streams.ProductVersionItem
 	var ans *VersionsSSBuilderManifest = &VersionsSSBuilderManifest{
 		Name:     product.Name,
-		Versions: make(map[string]lxd_streams.ProductVersion),
+		Versions: make(map[string]streams.ProductVersion),
 	}
 	var combined CombinedSha256Builder
 
@@ -136,8 +134,8 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 			continue
 		}
 
-		version := lxd_streams.ProductVersion{
-			Items: make(map[string]lxd_streams.ProductVersionItem),
+		version := streams.ProductVersion{
+			Items: make(map[string]streams.ProductVersionItem),
 		}
 
 		productBasePath = path.Join(
@@ -160,15 +158,15 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 
 		if lxdTarXzItem != nil {
 			if combined.SquashFsIsPresent {
-				(*lxdTarXzItem).LXDHashSha256SquashFs = hex.EncodeToString(
+				(*lxdTarXzItem).CombinedHashSha256SquashFs = hex.EncodeToString(
 					combined.CombinedSquashfsSha256.Sum(nil),
 				)
 			}
 
 			if combined.TarXzIsPresent {
 				sha := hex.EncodeToString(combined.CombinedRootxzSha256.Sum(nil))
-				(*lxdTarXzItem).LXDHashSha256RootXz = sha
-				(*lxdTarXzItem).LXDHashSha256 = sha
+				(*lxdTarXzItem).CombinedHashSha256RootXz = sha
+				(*lxdTarXzItem).CombinedHashSha256 = sha
 			}
 			version.Items["lxd.tar.xz"] = *lxdTarXzItem
 		}
@@ -179,9 +177,9 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 	return ans, nil
 }
 
-func checkItem(base, dir, productBasePath string, combined *CombinedSha256Builder) (*lxd_streams.ProductVersionItem, error) {
+func checkItem(base, dir, productBasePath string, combined *CombinedSha256Builder) (*streams.ProductVersionItem, error) {
 	var err error
-	var ans *lxd_streams.ProductVersionItem
+	var ans *streams.ProductVersionItem
 	var filePath string = fmt.Sprintf("%s/%s", dir, base)
 	var ftype string
 	var f os.FileInfo
@@ -213,7 +211,7 @@ func checkItem(base, dir, productBasePath string, combined *CombinedSha256Builde
 		return nil, err
 	}
 
-	ans = &lxd_streams.ProductVersionItem{
+	ans = &streams.ProductVersionItem{
 		Path:     fmt.Sprintf("%s/%s", productBasePath, base),
 		FileType: ftype,
 		Size:     f.Size(),

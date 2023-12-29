@@ -1,5 +1,4 @@
 /*
-
 Copyright (C) 2019  Daniele Rondina <geaaru@sabayonlinux.org>
 Credits goes also to Gogs authors, some code portions and re-implemented design
 are also coming from the Gogs project, which is using the go-macaron framework
@@ -17,7 +16,6 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
-
 */
 package index
 
@@ -29,15 +27,14 @@ import (
 	"path"
 	"strings"
 
-	lxd_streams "github.com/lxc/lxd/shared/simplestreams"
-
 	config "github.com/MottainaiCI/simplestreams-builder/pkg/config"
 	images "github.com/MottainaiCI/simplestreams-builder/pkg/images"
+	streams "github.com/MottainaiCI/simplestreams-builder/pkg/simplestreams"
 )
 
-func BuildIndexStruct(config *config.BuilderTreeConfig, sourceDir string) (*lxd_streams.Stream, error) {
-	var ans *lxd_streams.Stream
-	var products lxd_streams.StreamIndex
+func BuildIndexStruct(config *config.BuilderTreeConfig, sourceDir string) (*streams.Stream, error) {
+	var ans *streams.Stream
+	var products streams.StreamIndex
 	var ipath, prefix, ssbPath string
 	var manifest *images.VersionsSSBuilderManifest
 	var err error
@@ -55,7 +52,7 @@ func BuildIndexStruct(config *config.BuilderTreeConfig, sourceDir string) (*lxd_
 	ipath = strings.TrimLeft(config.ImagesPath, "/")
 	prefix = strings.TrimRight(config.Prefix, "/")
 
-	products = lxd_streams.StreamIndex{
+	products = streams.StreamIndex{
 		DataType: config.DataType,
 		Path: fmt.Sprintf("%s/images.json",
 			strings.TrimRight(path.Join(prefix, ipath), "/")),
@@ -116,10 +113,10 @@ func BuildIndexStruct(config *config.BuilderTreeConfig, sourceDir string) (*lxd_
 		products.Products = append(products.Products, v.Name)
 	}
 
-	ans = &lxd_streams.Stream{
+	ans = &streams.Stream{
 		// Statically use always index 1.0 format
 		Format: "index:1.0",
-		Index:  make(map[string]lxd_streams.StreamIndex),
+		Index:  make(map[string]streams.StreamIndex),
 	}
 
 	ans.Index["images"] = products
@@ -127,7 +124,7 @@ func BuildIndexStruct(config *config.BuilderTreeConfig, sourceDir string) (*lxd_
 	return ans, nil
 }
 
-func WriteIndexJson(index *lxd_streams.Stream, out io.Writer) error {
+func WriteIndexJson(index *streams.Stream, out io.Writer) error {
 	enc := json.NewEncoder(out)
 	return enc.Encode(index)
 }

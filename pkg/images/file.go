@@ -1,5 +1,4 @@
 /*
-
 Copyright (C) 2019  Daniele Rondina <geaaru@sabayonlinux.org>
 Credits goes also to Gogs authors, some code portions and re-implemented design
 are also coming from the Gogs project, which is using the go-macaron framework
@@ -17,7 +16,6 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
-
 */
 package images
 
@@ -29,17 +27,16 @@ import (
 	"path"
 	"strings"
 
-	lxd_streams "github.com/lxc/lxd/shared/simplestreams"
-
 	config "github.com/MottainaiCI/simplestreams-builder/pkg/config"
+	streams "github.com/MottainaiCI/simplestreams-builder/pkg/simplestreams"
 )
 
-func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_streams.Products, error) {
+func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*streams.Products, error) {
 	// NOTE: currently SimpleStreamsManifest struct doesn't contain
 	//       content_id field.
 	var ssbPath string
-	var ans *lxd_streams.Products
-	var prodMap map[string]lxd_streams.Product
+	var ans *streams.Products
+	var prodMap map[string]streams.Product
 	var manifest *VersionsSSBuilderManifest
 	var err error
 
@@ -54,9 +51,9 @@ func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_s
 		return nil, fmt.Errorf("No products defined")
 	}
 
-	prodMap = make(map[string]lxd_streams.Product)
+	prodMap = make(map[string]streams.Product)
 
-	ans = &lxd_streams.Products{
+	ans = &streams.Products{
 		// TODO: See what is format of updated field.
 		DataType: config.DataType,
 		Format:   config.Format,
@@ -113,7 +110,7 @@ func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_s
 			continue
 		}
 
-		prodManifest := lxd_streams.Product{
+		prodManifest := streams.Product{
 			Architecture:    v.Architecture,
 			OperatingSystem: v.OperatingSystem,
 			Release:         v.Release,
@@ -139,7 +136,7 @@ func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*lxd_s
 	return ans, nil
 }
 
-func WriteImagesJson(imgs *lxd_streams.Products, out io.Writer) error {
+func WriteImagesJson(imgs *streams.Products, out io.Writer) error {
 	enc := json.NewEncoder(out)
 	return enc.Encode(imgs)
 }
