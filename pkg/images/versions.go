@@ -79,7 +79,7 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 	var err error
 	var files []os.FileInfo
 	var productBasePath, itemDir, eolDuration string
-	var item, lxdTarXzItem *streams.ProductVersionItem
+	var item, lxdTarXzItem, incusTarXzItem *streams.ProductVersionItem
 	var ans *VersionsSSBuilderManifest = &VersionsSSBuilderManifest{
 		Name:     product.Name,
 		Versions: make(map[string]streams.ProductVersion),
@@ -147,6 +147,7 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 			product.Name, productBasePath))
 
 		lxdTarXzItem, _ = checkItem("lxd.tar.xz", itemDir, productBasePath, &combined)
+		incusTarXzItem, _ = checkItem("incus.tar.xz", itemDir, productBasePath, &combined)
 		item, _ = checkItem("rootfs.squashfs", itemDir, productBasePath, &combined)
 		if item != nil {
 			version.Items["root.squashfs"] = *item
@@ -169,6 +170,21 @@ func BuildVersionsManifest(product *config.SimpleStreamsProduct,
 				(*lxdTarXzItem).CombinedHashSha256 = sha
 			}
 			version.Items["lxd.tar.xz"] = *lxdTarXzItem
+		}
+
+		if incusTarXzItem != nil {
+			if combined.SquashFsIsPresent {
+				(*incusTarXzItem).CombinedHashSha256SquashFs = hex.EncodeToString(
+					combined.CombinedSquashfsSha256.Sum(nil),
+				)
+			}
+
+			if combined.TarXzIsPresent {
+				sha := hex.EncodeToString(combined.CombinedRootxzSha256.Sum(nil))
+				(*incusTarXzItem).CombinedHashSha256RootXz = sha
+				(*incusTarXzItem).CombinedHashSha256 = sha
+			}
+			version.Items["incus.tar.xz"] = *incusTarXzItem
 		}
 
 		ans.Versions[f.Name()] = version
@@ -196,7 +212,7 @@ func checkItem(base, dir, productBasePath string, combined *CombinedSha256Builde
 	if base == "rootfs.squashfs" {
 		ftype = "squashfs"
 		(*combined).SquashFsIsPresent = true
-	} else if base == "lxd.tar.xz" {
+	} else if base == "lxd.tar.xz" || base == "incus.tar.xz" {
 		ftype = base
 	} else if base == "rootfs.tar.xz" {
 		(*combined).TarXzIsPresent = true
@@ -231,7 +247,7 @@ func checkItem(base, dir, productBasePath string, combined *CombinedSha256Builde
 			pb = buf[0:nBytes]
 			fmd5.Write(pb)
 			fsha.Write(pb)
-			if base == "lxd.tar.xz" {
+			if base == "lxd.tar.xz" || base == "incus.tar.xz" {
 				(*combined).CombinedRootxzSha256.Write(pb)
 				(*combined).CombinedSquashfsSha256.Write(pb)
 			} else if base == "rootfs.tar.xz" {
