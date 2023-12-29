@@ -36,7 +36,7 @@ Copyright (c) 2019-2023 Mottainai
 
 Mottainai - LXC/LXD/Incus Simplestreams Tree Builder`
 
-	SSB_VERSION = `0.2.1`
+	SSB_VERSION = `0.3.0`
 )
 
 var (
