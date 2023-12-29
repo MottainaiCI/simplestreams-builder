@@ -18,12 +18,12 @@
   version = "v1.0"
 
 [[projects]]
-  digest = "1:49ab40aecc2c09b5eb0a277716f17958c502dc634d31eff3c345821320b1af31"
+  digest = "1:04a2745baaf3f123935a565182f40763920c8fea322c141373f8d7bd3ffc6aaa"
   name = "github.com/jaypipes/pcidb"
   packages = ["."]
   pruneopts = ""
-  revision = "4d488f78747b8369c9f5bb93462241a30d178059"
-  version = "0.4"
+  revision = "141a53e65d4ad43fdbd2760c714344da88f24adb"
+  version = "0.3"
 
 [[projects]]
   digest = "1:096a8a9182648da3d00ff243b88407838902b6703fc12657f76890e08d1899bf"

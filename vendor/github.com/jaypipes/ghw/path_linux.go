@@ -45,10 +45,6 @@ func (ctx *context) pathSysClassDrm() string {
 	return filepath.Join(ctx.chroot, "sys", "class", "drm")
 }
 
-func (ctx *context) pathSysClassDMI() string {
-	return filepath.Join(ctx.chroot, "sys", "class", "dmi")
-}
-
 func (ctx *context) pathSysClassNet() string {
 	return filepath.Join(ctx.chroot, "sys", "class", "net")
 }

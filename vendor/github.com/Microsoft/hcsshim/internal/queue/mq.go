@@ -5,7 +5,10 @@ import (
 	"sync"
 )
 
-var ErrQueueClosed = errors.New("the queue is closed for reading and writing")
+var (
+	ErrQueueClosed = errors.New("the queue is closed for reading and writing")
+	ErrQueueEmpty  = errors.New("the queue is empty")
+)
 
 // MessageQueue represents a threadsafe message queue to be used to retrieve or
 // write messages to.
@@ -26,8 +29,8 @@ func NewMessageQueue() *MessageQueue {
 	}
 }
 
-// Enqueue writes `msg` to the queue.
-func (mq *MessageQueue) Enqueue(msg interface{}) error {
+// Write writes `msg` to the queue.
+func (mq *MessageQueue) Write(msg interface{}) error {
 	mq.m.Lock()
 	defer mq.m.Unlock()
 
@@ -40,37 +43,55 @@ func (mq *MessageQueue) Enqueue(msg interface{}) error {
 	return nil
 }
 
-// Dequeue will read a value from the queue and remove it. If the queue
-// is empty, this will block until the queue is closed or a value gets enqueued.
-func (mq *MessageQueue) Dequeue() (interface{}, error) {
+// Read will read a value from the queue if available, otherwise return an error.
+func (mq *MessageQueue) Read() (interface{}, error) {
 	mq.m.Lock()
 	defer mq.m.Unlock()
-
-	for !mq.closed && mq.size() == 0 {
-		mq.c.Wait()
-	}
-
-	// We got woken up, check if it's because the queue got closed.
 	if mq.closed {
 		return nil, ErrQueueClosed
 	}
-
+	if mq.isEmpty() {
+		return nil, ErrQueueEmpty
+	}
 	val := mq.messages[0]
 	mq.messages[0] = nil
 	mq.messages = mq.messages[1:]
 	return val, nil
 }
 
-// Size returns the size of the queue.
-func (mq *MessageQueue) Size() int {
-	mq.m.RLock()
-	defer mq.m.RUnlock()
-	return mq.size()
+// ReadOrWait will read a value from the queue if available, else it will wait for a
+// value to become available. This will block forever if nothing gets written or until
+// the queue gets closed.
+func (mq *MessageQueue) ReadOrWait() (interface{}, error) {
+	mq.m.Lock()
+	if mq.closed {
+		mq.m.Unlock()
+		return nil, ErrQueueClosed
+	}
+	if mq.isEmpty() {
+		for !mq.closed && mq.isEmpty() {
+			mq.c.Wait()
+		}
+		mq.m.Unlock()
+		return mq.Read()
+	}
+	val := mq.messages[0]
+	mq.messages[0] = nil
+	mq.messages = mq.messages[1:]
+	mq.m.Unlock()
+	return val, nil
 }
 
-// Nonexported size check to check if the queue is empty inside already locked functions.
-func (mq *MessageQueue) size() int {
-	return len(mq.messages)
+// IsEmpty returns if the queue is empty
+func (mq *MessageQueue) IsEmpty() bool {
+	mq.m.RLock()
+	defer mq.m.RUnlock()
+	return len(mq.messages) == 0
+}
+
+// Nonexported empty check that doesn't lock so we can call this in Read and Write.
+func (mq *MessageQueue) isEmpty() bool {
+	return len(mq.messages) == 0
 }
 
 // Close closes the queue for future writes or reads. Any attempts to read or write from the
@@ -78,15 +99,13 @@ func (mq *MessageQueue) size() int {
 func (mq *MessageQueue) Close() {
 	mq.m.Lock()
 	defer mq.m.Unlock()
-
-	// Already closed, noop
+	// Already closed
 	if mq.closed {
 		return
 	}
-
 	mq.messages = nil
 	mq.closed = true
-	// If there's anybody currently waiting on a value from Dequeue, we need to
+	// If there's anybody currently waiting on a value from ReadOrWait, we need to
 	// broadcast so the read(s) can return ErrQueueClosed.
 	mq.c.Broadcast()
 }
