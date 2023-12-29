@@ -115,7 +115,7 @@ func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*strea
 			OperatingSystem: v.OperatingSystem,
 			Release:         v.Release,
 			ReleaseTitle:    v.ReleaseTitle,
-			Versions:        manifest.Versions,
+			Versions:        BridgeIncusLXDVersionsItems(manifest.Versions),
 		}
 
 		if v.Version != "" {
@@ -131,6 +131,7 @@ func BuildImagesFile(config *config.BuilderTreeConfig, sourceDir string) (*strea
 		}
 
 		ans.Products[v.Name] = prodManifest
+
 	}
 
 	return ans, nil
