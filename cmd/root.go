@@ -23,18 +23,18 @@ import (
 	"fmt"
 	"os"
 
-	utils "github.com/MottainaiCI/mottainai-server/pkg/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	conf "github.com/MottainaiCI/simplestreams-builder/pkg/config"
+	utils "github.com/MottainaiCI/simplestreams-builder/pkg/tools"
 )
 
 const (
 	cliName = `Simplestreams Builder
 Copyright (c) 2019-2023 Mottainai
 
-Mottainai - LXC/LXD Simplestreams Tree Builder`
+Mottainai - LXC/LXD/Incus Simplestreams Tree Builder`
 
 	SSB_VERSION = `0.2.1`
 )

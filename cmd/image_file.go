@@ -1,5 +1,4 @@
 /*
-
 Copyright (C) 2019  Daniele Rondina <geaaru@sabayonlinux.org>
 Credits goes also to Gogs authors, some code portions and re-implemented design
 are also coming from the Gogs project, which is using the go-macaron framework
@@ -17,7 +16,6 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
-
 */
 package cmd
 
@@ -28,11 +26,11 @@ import (
 	path "path/filepath"
 	"strings"
 
-	utils "github.com/MottainaiCI/mottainai-server/pkg/utils"
 	"github.com/spf13/cobra"
 
 	conf "github.com/MottainaiCI/simplestreams-builder/pkg/config"
 	images "github.com/MottainaiCI/simplestreams-builder/pkg/images"
+	utils "github.com/MottainaiCI/simplestreams-builder/pkg/tools"
 )
 
 func newBuildImagesFileCommand(config *conf.BuilderTreeConfig) *cobra.Command {
